@@ -1,0 +1,40 @@
+<h3>Round {{ game.round_number }} Results</h3>
+
+<p>
+    <strong>Answer:</strong> {{ round.track.name }}
+    — by {{ round.track.artists | join(", ") }}
+    {% if round.track.year %} ({{ round.track.year }}){% endif %}
+</p>
+
+<table border="1" cellpadding="4">
+    <tr>
+        <th>Player</th>
+        <th>Song Guess</th>
+        <th>Artist Guess</th>
+        <th>Year Guess</th>
+        <th>Points</th>
+    </tr>
+    {% for g in round.guesses %}
+    <tr>
+        <td>{{ g.player_name }}</td>
+        <td>{{ g.song_guess }} {{ "✔" if g.song_correct else "✘" }}</td>
+        <td>{{ g.artist_guess or "—" }} {{ "✔" if g.artist_correct else ("✘" if g.artist_guess else "") }}</td>
+        <td>{{ g.year_guess or "—" }} {{ "✔" if g.year_correct else ("✘" if g.year_guess else "") }}</td>
+        <td>{{ g.points }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>Current Scores</h3>
+{% include "partials/scoreboard.html" %}
+
+<br>
+{% if game.is_game_over() %}
+<form action="/leaderboard" method="get">
+    <button type="submit">See Final Leaderboard</button>
+</form>
+{% else %}
+<form action="/game/next-round" method="post">
+    <button type="submit">Next Round</button>
+</form>
+{% endif %}

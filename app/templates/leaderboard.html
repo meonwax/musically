@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Final Leaderboard{% endblock %}
+
+{% block content %}
+<h2>Game Over — Final Leaderboard</h2>
+
+<p>After {{ game.round_number }} round{{ "s" if game.round_number != 1 else "" }}:</p>
+
+<table border="1" cellpadding="6">
+    <tr>
+        <th>#</th>
+        <th>Player</th>
+        <th>Score</th>
+    </tr>
+    {% for player in leaderboard %}
+    <tr>
+        <td>{{ loop.index }}</td>
+        <td>{% if loop.first %}<strong>{{ player.name }}</strong>{% else %}{{ player.name }}{% endif %}</td>
+        <td>{% if loop.first %}<strong>{{ player.score }}</strong>{% else %}{{ player.score }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% if leaderboard %}
+<p>Winner: <strong>{{ leaderboard[0].name }}</strong> with {{ leaderboard[0].score }} point{{ "s" if leaderboard[0].score != 1 else "" }}!</p>
+{% endif %}
+
+<br>
+<a href="/lobby">Play Again</a>
+{% endblock %}

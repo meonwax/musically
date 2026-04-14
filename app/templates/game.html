@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Round {{ game.round_number }}{% endblock %}
+
+{% block head %}
+<script src="/static/js/spotify-player.js"></script>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+{% endblock %}
+
+{% block content %}
+<div id="spotify-data" data-token="{{ spotify_token }}" style="display:none"></div>
+
+<h2>
+    Round {{ game.round_number }}{% if game.total_rounds > 0 %} / {{ game.total_rounds }}{% endif %}
+</h2>
+
+<p id="player-status">Connecting to Spotify...</p>
+
+<!-- Hidden form that auto-submits when the player is ready to trigger playback -->
+<form id="play-track-form" hx-post="/game/play-track" hx-swap="none" style="display:none">
+    <input type="hidden" name="device_id" id="device-id" value="">
+</form>
+
+<hr>
+
+<!-- Scoreboard -->
+<h3>Scores</h3>
+{% include "partials/scoreboard.html" %}
+
+<hr>
+
+<!-- Guess area (HTMX-swapped) -->
+<div id="guess-area">
+    {% if game.phase.name == "ROUND_RESULT" %}
+        {% include "partials/round_result.html" %}
+    {% else %}
+        {% include "partials/guess_form.html" %}
+    {% endif %}
+</div>
+
+<hr>
+<form action="/game/end" method="post" style="margin-top:1em">
+    <button type="submit">End Game</button>
+</form>
+
+{% endblock %}

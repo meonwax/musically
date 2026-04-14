@@ -1,0 +1,59 @@
+# Musically - Agent Rules
+
+## Project Overview
+
+Musically is a party-mode song guessing game powered by Spotify.
+See `docs/architecture.md` for the full architecture and design plan.
+
+## Tech Stack
+
+- **Backend**: Python 3.12+ / FastAPI
+- **Frontend**: HTML + HTMX, minimal vanilla JS for Spotify playback only
+- **Package manager**: uv
+- **Templates**: Jinja2 (in `app/templates/`)
+- **No database**: All state is in-memory via Python dataclasses
+
+## Conventions
+
+- Use `uv add <package>` to add dependencies.
+- Run the dev server with `uv run uvicorn app.main:app --reload`.
+- Keep JavaScript to the absolute minimum required for Spotify Web Playback SDK integration. All UI interactions should go through HTMX and server-side templates.
+- HTMX partials live in `app/templates/partials/` and are returned by routes for partial page updates.
+- Full-page templates extend `base.html`.
+- Game state lives in `app/game.py` as dataclasses. There is no database.
+- Spotify API interaction is encapsulated in `app/spotify.py`.
+- Configuration is loaded from environment variables via `app/config.py` and `.env`.
+- Do not commit `.env` or secrets. Use `.env.example` as the template.
+
+## Code Style
+
+- Use `from __future__ import annotations` in all Python files.
+- Prefer dataclasses over dicts for structured data.
+- Use type hints throughout.
+- Keep route handlers thin; business logic belongs in `app/game.py` or `app/matching.py`.
+- No CSS frameworks. Keep styling minimal.
+
+## Testing
+
+- Run tests with `uv run pytest` (config in `pyproject.toml`).
+- Tests live in `tests/` and mirror the `app/` structure:
+  - `test_game.py` — unit tests for game state and logic
+  - `test_matching.py` — unit tests for fuzzy matching
+  - `test_spotify.py` — unit tests for Spotify client (extract_playlist_id, tokens, auth URL)
+  - `test_routes.py` — integration tests for all HTTP routes using FastAPI TestClient
+- Shared fixtures are in `tests/conftest.py` (game states, settings, mock Spotify tokens).
+- Async tests use `pytest-asyncio` with `asyncio_mode = "auto"`.
+- When changing source code, always update or extend the corresponding tests and run the full suite before considering the task done.
+- Use `TemplateResponse(request, "name.html", context={...})` (Starlette 1.0 API). Do NOT pass `request` inside the context dict.
+
+## File Layout
+
+```
+app/              Python backend (FastAPI)
+app/routes/       Route handlers grouped by feature
+app/templates/    Jinja2 full-page templates
+app/templates/partials/  HTMX partial templates
+static/js/        Client-side JavaScript (Spotify SDK only)
+tests/            Pytest test suite
+docs/             Architecture and design documentation
+```

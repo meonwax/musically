@@ -1,0 +1,25 @@
+[project]
+name = "musically"
+version = "0.1.0"
+description = "A party-mode song guessing game"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.135.3",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.26",
+    "thefuzz[speedup]>=0.22.1",
+    "uvicorn[standard]>=0.44.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

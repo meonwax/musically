@@ -1,0 +1,12 @@
+<table border="1" cellpadding="4">
+    <tr>
+        <th>Player</th>
+        <th>Score</th>
+    </tr>
+    {% for player in game.get_leaderboard() %}
+    <tr>
+        <td>{{ player.name }}</td>
+        <td>{{ player.score }}</td>
+    </tr>
+    {% endfor %}
+</table>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Home{% endblock %}
+
+{% block content %}
+<h2>Welcome to Musically!</h2>
+<p>A party song-guessing game.</p>
+
+{% if error %}
+<p><strong>Error:</strong> {{ error }}</p>
+{% endif %}
+
+<p>The host needs to log in with a Spotify Premium account to get started.</p>
+<a href="/login">Login with Spotify</a>
+{% endblock %}

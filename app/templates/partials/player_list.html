@@ -1,0 +1,19 @@
+{% if error is defined and error %}
+<p><strong>{{ error }}</strong></p>
+{% endif %}
+
+{% if game.players %}
+<ul>
+    {% for player in game.players %}
+    <li>
+        {{ player.name }}
+        <form style="display:inline" hx-post="/lobby/remove-player" hx-target="#player-list" hx-swap="innerHTML">
+            <input type="hidden" name="player_name" value="{{ player.name }}">
+            <button type="submit">Remove</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No players yet.</p>
+{% endif %}

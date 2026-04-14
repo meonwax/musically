@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title_suffix %} - Lobby{% endblock %}
+
+{% block content %}
+<h2>Game Lobby</h2>
+
+{% if error %}
+<p><strong>Error:</strong> {{ error }}</p>
+{% endif %}
+
+<!-- Playlist Setup -->
+<h3>1. Set Playlist</h3>
+<form hx-post="/lobby/set-playlist" hx-target="#playlist-info" hx-swap="innerHTML">
+    <input type="text" name="playlist_url" placeholder="Spotify playlist URL or ID" size="60" required>
+    <button type="submit">Load Playlist</button>
+</form>
+<div id="playlist-info">
+    {% if game.playlist_tracks %}
+    <p>Playlist loaded: {{ game.playlist_tracks | length }} tracks</p>
+    {% endif %}
+</div>
+
+<hr>
+
+<!-- Player Registration -->
+<h3>2. Add Players</h3>
+<form hx-post="/lobby/add-player" hx-target="#player-list" hx-swap="innerHTML">
+    <input type="text" name="player_name" placeholder="Player name" required>
+    <button type="submit">Add Player</button>
+</form>
+<div id="player-list">
+    {% include "partials/player_list.html" %}
+</div>
+
+<hr>
+
+<!-- Game Configuration & Start -->
+<h3>3. Start Game</h3>
+<form action="/lobby/start" method="post">
+    <label for="total_rounds">Number of rounds (0 = endless):</label>
+    <input type="number" name="total_rounds" id="total_rounds" value="10" min="0">
+    <br><br>
+    <button type="submit">Start Game</button>
+</form>
+{% endblock %}

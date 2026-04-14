@@ -1,0 +1,18 @@
+{% if round and not round.all_guessed %}
+<h3>{{ round.current_player }}'s turn</h3>
+<p>Listen to the song and type your guesses:</p>
+<form hx-post="/game/guess" hx-target="#guess-area" hx-swap="innerHTML">
+    <label>Song title:</label><br>
+    <input type="text" name="guess" placeholder="Song title..." size="40" autofocus autocomplete="off"><br><br>
+    <label>Artist (optional, +1 point):</label><br>
+    <input type="text" name="artist" placeholder="Artist name..." size="40" autocomplete="off"><br><br>
+    <label>Release year (optional, doubles your points):</label><br>
+    <input type="number" name="year" placeholder="e.g. 1985" min="1900" max="2099" style="width:8em" autocomplete="off"><br><br>
+    <button type="submit">Submit Guess</button>
+</form>
+<form hx-post="/game/skip" hx-target="#guess-area" hx-swap="innerHTML" style="margin-top:0.5em">
+    <button type="submit">Skip</button>
+</form>
+{% else %}
+<p>Waiting for round to start...</p>
+{% endif %}
