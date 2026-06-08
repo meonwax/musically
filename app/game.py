@@ -16,6 +16,9 @@ class GamePhase(Enum):
 class Player:
     name: str
     score: int = 0
+    correct_songs: int = 0
+    correct_artists: int = 0
+    correct_years: int = 0
 
 
 @dataclass
@@ -108,6 +111,9 @@ class GameState:
         self.round_number = 0
         for p in self.players:
             p.score = 0
+            p.correct_songs = 0
+            p.correct_artists = 0
+            p.correct_years = 0
         self.available_tracks = list(self.playlist_tracks)
         random.shuffle(self.available_tracks)
 
@@ -157,6 +163,12 @@ class GameState:
         for p in self.players:
             if p.name == player_name:
                 p.score += pts
+                if song_correct:
+                    p.correct_songs += 1
+                if artist_correct:
+                    p.correct_artists += 1
+                if year_correct:
+                    p.correct_years += 1
                 break
         self.current_round.current_player_idx += 1
 

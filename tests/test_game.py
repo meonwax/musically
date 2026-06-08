@@ -126,8 +126,14 @@ class TestGameStatePlaylist:
 class TestGameStateRounds:
     def test_start_game_resets_scores(self, game_ready: GameState):
         game_ready.players[0].score = 5
+        game_ready.players[0].correct_songs = 2
+        game_ready.players[0].correct_artists = 1
+        game_ready.players[0].correct_years = 3
         game_ready.start_game()
         assert all(p.score == 0 for p in game_ready.players)
+        assert all(p.correct_songs == 0 for p in game_ready.players)
+        assert all(p.correct_artists == 0 for p in game_ready.players)
+        assert all(p.correct_years == 0 for p in game_ready.players)
 
     def test_start_game_sets_phase(self, game_ready: GameState):
         game_ready.start_game()
@@ -181,6 +187,9 @@ class TestGameStateGuessing:
         self._guess(game_playing, player, song_ok=True)
         p = next(p for p in game_playing.players if p.name == player)
         assert p.score == 1
+        assert p.correct_songs == 1
+        assert p.correct_artists == 0
+        assert p.correct_years == 0
         assert rnd.guesses[0].song_correct is True
         assert rnd.guesses[0].points == 1
 
@@ -205,6 +214,9 @@ class TestGameStateGuessing:
         self._guess(game_playing, player, song_ok=True, artist_ok=True, year_ok=True)
         p = next(p for p in game_playing.players if p.name == player)
         assert p.score == 4
+        assert p.correct_songs == 1
+        assert p.correct_artists == 1
+        assert p.correct_years == 1
         assert rnd.guesses[0].points == 4
 
     def test_year_alone_gives_zero(self, game_playing: GameState):

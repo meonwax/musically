@@ -25,8 +25,13 @@ async def lobby(request: Request):
         game.reset()
     game.phase = GamePhase.LOBBY
     return templates.TemplateResponse(
-        request, "lobby.html",
-        context={"game": game, "error": request.query_params.get("error")},
+        request,
+        "lobby.html",
+        context={
+            "game": game,
+            "error": request.query_params.get("error"),
+            "predefined_playlists": request.app.state.predefined_playlists,
+        },
     )
 
 

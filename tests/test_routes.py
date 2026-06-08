@@ -111,6 +111,8 @@ class TestLobbyRoutes:
             resp = authed_client.get("/lobby")
         assert resp.status_code == 200
         assert "Game Lobby" in resp.text
+        assert "Rolling Stone 500 Best Songs Of All Time" in resp.text
+        assert "Choose a playlist" in resp.text
 
     def test_add_player(self, authed_client: TestClient):
         with authed_client:
@@ -281,13 +283,22 @@ class TestLeaderboardRoute:
         game.add_player("Alice")
         game.add_player("Bob")
         game.players[0].score = 5
+        game.players[0].correct_songs = 2
+        game.players[0].correct_artists = 3
+        game.players[0].correct_years = 1
         game.players[1].score = 3
+        game.players[1].correct_songs = 1
+        game.players[1].correct_artists = 1
+        game.players[1].correct_years = 0
         game.end_game()
         with authed_client:
             resp = authed_client.get("/leaderboard")
         assert resp.status_code == 200
         assert "Alice" in resp.text
         assert "Bob" in resp.text
+        assert "Songs" in resp.text
+        assert "Artists" in resp.text
+        assert "Years" in resp.text
 
     def test_game_redirects_to_leaderboard_when_finished(self, authed_client: TestClient):
         game = app.state.game

@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.game import GameState
+from app.playlists import load_predefined_playlists
 from app.routes import auth, game, lobby
 from app.spotify import SpotifyClient
 
@@ -20,6 +21,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.state.settings = settings
 app.state.spotify = SpotifyClient(settings=settings)
 app.state.game = GameState()
+app.state.predefined_playlists = load_predefined_playlists()
 
 app.include_router(auth.router)
 app.include_router(lobby.router)
