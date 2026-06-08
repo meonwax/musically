@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "musically.toml"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 
 
 @dataclass(frozen=True)

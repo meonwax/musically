@@ -32,7 +32,11 @@ logger.info(
 
 app = FastAPI(title="Musically")
 app.add_middleware(RequestLoggingMiddleware)
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key,
+    https_only=settings.spotify_redirect_uri.startswith("https://"),
+)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.state.settings = settings

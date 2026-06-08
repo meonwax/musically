@@ -23,7 +23,7 @@ class TestLoadGameConfig:
         assert config.points == ScoringConfig(song=1, artist=1, year_multiplier=2)
 
     def test_loads_custom_path(self, tmp_path: Path):
-        config = tmp_path / "musically.toml"
+        config = tmp_path / "config.toml"
         config.write_text(
             """
 [playlists]
@@ -48,13 +48,13 @@ year_multiplier = 4
         )
 
     def test_rejects_invalid_playlists_type(self, tmp_path: Path):
-        config = tmp_path / "musically.toml"
+        config = tmp_path / "config.toml"
         config.write_text('playlists = "nope"', encoding="utf-8")
         with pytest.raises(ValueError, match="'playlists' must be a table"):
             load_game_config(config)
 
     def test_rejects_empty_playlist_url(self, tmp_path: Path):
-        config = tmp_path / "musically.toml"
+        config = tmp_path / "config.toml"
         config.write_text(
             '[playlists]\n"My Playlist" = ""\n\n[points]\nsong = 1\nartist = 1\nyear_multiplier = 2',
             encoding="utf-8",
@@ -63,7 +63,7 @@ year_multiplier = 4
             load_game_config(config)
 
     def test_rejects_invalid_points(self, tmp_path: Path):
-        config = tmp_path / "musically.toml"
+        config = tmp_path / "config.toml"
         config.write_text("[points]\nsong = 0", encoding="utf-8")
         with pytest.raises(ValueError, match="points.song must be a positive integer"):
             load_game_config(config)
