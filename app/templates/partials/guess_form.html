@@ -4,9 +4,9 @@
 <form hx-post="/game/guess" hx-target="#guess-area" hx-swap="innerHTML">
     <label>Song title:</label><br>
     <input type="text" name="guess" placeholder="Song title..." size="40" autofocus autocomplete="off"><br><br>
-    <label>Artist (optional, +1 point):</label><br>
+    <label>Artist (optional, +{{ game.scoring.artist }} point{{ "s" if game.scoring.artist != 1 else "" }}):</label><br>
     <input type="text" name="artist" placeholder="Artist name..." size="40" autocomplete="off"><br><br>
-    <label>Release year (optional, doubles your points):</label><br>
+    <label>Release year (optional, {{ game.scoring.year_hint() }}):</label><br>
     <input type="number" name="year" class="input-narrow" placeholder="e.g. 1985" min="1900" max="2099" autocomplete="off"><br><br>
     <button type="submit">Submit Guess</button>
 </form>

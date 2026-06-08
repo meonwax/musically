@@ -1,0 +1,10 @@
+[playlists]
+"Rolling Stone 500 Best Songs Of All Time" = "https://open.spotify.com/playlist/7kcvsrztoIt6CvWxpY0tGs?si=cd112b5207b84da3"
+"Top 1000 Songs of All Time" = "https://open.spotify.com/playlist/3Q1DIJ51dJpUO6RhnIHdVx"
+"Best Hip-Hop of all time" = "https://open.spotify.com/playlist/1PIy8ktH4S4BwZx9JAB5zN"
+"Guess the Song" = "https://open.spotify.com/playlist/4cZTdWiw6GIlBHYrgUjDJ1"
+
+[points]
+song = 1
+artist = 1
+year_multiplier = 2

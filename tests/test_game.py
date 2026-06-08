@@ -8,7 +8,10 @@ from app.game import (
     Track,
     compute_points,
 )
+from app.game_config import ScoringConfig
 from tests.conftest import SAMPLE_TRACKS
+
+DEFAULT_SCORING = ScoringConfig(song=1, artist=1, year_multiplier=2)
 
 
 class TestPlayer:
@@ -53,28 +56,32 @@ class TestRoundState:
 
 class TestComputePoints:
     def test_nothing_correct(self):
-        assert compute_points(False, False, False) == 0
+        assert compute_points(False, False, False, DEFAULT_SCORING) == 0
 
     def test_song_only(self):
-        assert compute_points(True, False, False) == 1
+        assert compute_points(True, False, False, DEFAULT_SCORING) == 1
 
     def test_artist_only(self):
-        assert compute_points(False, True, False) == 1
+        assert compute_points(False, True, False, DEFAULT_SCORING) == 1
 
     def test_song_and_artist(self):
-        assert compute_points(True, True, False) == 2
+        assert compute_points(True, True, False, DEFAULT_SCORING) == 2
 
     def test_song_and_year(self):
-        assert compute_points(True, False, True) == 2
+        assert compute_points(True, False, True, DEFAULT_SCORING) == 2
 
     def test_artist_and_year(self):
-        assert compute_points(False, True, True) == 2
+        assert compute_points(False, True, True, DEFAULT_SCORING) == 2
 
     def test_all_correct(self):
-        assert compute_points(True, True, True) == 4
+        assert compute_points(True, True, True, DEFAULT_SCORING) == 4
 
     def test_year_alone_gives_nothing(self):
-        assert compute_points(False, False, True) == 0
+        assert compute_points(False, False, True, DEFAULT_SCORING) == 0
+
+    def test_custom_scoring(self):
+        scoring = ScoringConfig(song=2, artist=3, year_multiplier=4)
+        assert compute_points(True, True, True, scoring) == 20
 
 
 class TestGameStatePlayers:

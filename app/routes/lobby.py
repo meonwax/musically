@@ -67,7 +67,7 @@ async def lobby(request: Request):
         request,
         "lobby.html",
         context={
-            "predefined_playlists": request.app.state.predefined_playlists,
+            "predefined_playlists": request.app.state.game_config.playlists,
             **_lobby_message_context(
                 game, error=request.query_params.get("error")
             ),

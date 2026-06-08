@@ -4,6 +4,8 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+from app.game_config import ScoringConfig
+
 
 class GamePhase(Enum):
     LOBBY = auto()
@@ -60,16 +62,25 @@ class RoundState:
 
 
 def compute_points(
-    song_correct: bool, artist_correct: bool, year_correct: bool
+    song_correct: bool,
+    artist_correct: bool,
+    year_correct: bool,
+    scoring: ScoringConfig,
 ) -> int:
-    base = (1 if song_correct else 0) + (1 if artist_correct else 0)
+    base = (scoring.song if song_correct else 0) + (
+        scoring.artist if artist_correct else 0
+    )
     if year_correct and base > 0:
-        return base * 2
+        return base * scoring.year_multiplier
     return base
+
+
+_DEFAULT_SCORING = ScoringConfig(song=1, artist=1, year_multiplier=2)
 
 
 @dataclass
 class GameState:
+    scoring: ScoringConfig = field(default_factory=lambda: _DEFAULT_SCORING)
     players: list[Player] = field(default_factory=list)
     total_rounds: int = 0  # 0 = endless
     phase: GamePhase = GamePhase.LOBBY
@@ -147,7 +158,9 @@ class GameState:
     ) -> None:
         if self.current_round is None:
             return
-        pts = compute_points(song_correct, artist_correct, year_correct)
+        pts = compute_points(
+            song_correct, artist_correct, year_correct, self.scoring
+        )
         self.current_round.guesses.append(
             RoundGuess(
                 player_name=player_name,
