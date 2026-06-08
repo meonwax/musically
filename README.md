@@ -123,3 +123,9 @@ docker --context musically-prod compose up -d --build
 4. Start the game — a random song plays and each player takes turns typing their guess.
 5. After all players guess, the answer is revealed and scores are updated.
 6. At the end, the final leaderboard shows the winner.
+
+## License
+
+Copyright © 2026 Meonwax
+
+Musically is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE) for the full text.

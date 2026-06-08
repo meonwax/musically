@@ -2,6 +2,7 @@
 name = "musically"
 version = "0.1.0"
 description = "A party-mode song guessing game"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.135.3",
