@@ -1,0 +1,8 @@
+{% if message %}
+<p class="message message--{{ message_type }}">{{ message }}</p>
+{% endif %}
+{% if enrichment_pending %}
+<span hx-get="/lobby/enrichment-status"
+      hx-trigger="load delay:2s"
+      hx-swap="none"></span>
+{% endif %}

@@ -8,16 +8,18 @@
 {% endblock %}
 
 {% block content %}
-<div id="spotify-data" data-token="{{ spotify_token }}" style="display:none"></div>
+<div id="spotify-data" class="hidden" data-token="{{ spotify_token }}"></div>
 
 <h2>
     Round {{ game.round_number }}{% if game.total_rounds > 0 %} / {{ game.total_rounds }}{% endif %}
 </h2>
 
-<p id="player-status">Connecting to Spotify...</p>
+<div id="game-messages" class="message-pane" aria-live="polite">
+    <p id="player-status" class="message message--status">Connecting to Spotify...</p>
+</div>
 
 <!-- Hidden form that auto-submits when the player is ready to trigger playback -->
-<form id="play-track-form" hx-post="/game/play-track" hx-swap="none" style="display:none">
+<form id="play-track-form" class="hidden" hx-post="/game/play-track" hx-swap="none">
     <input type="hidden" name="device_id" id="device-id" value="">
 </form>
 
@@ -39,7 +41,7 @@
 </div>
 
 <hr>
-<form action="/game/end" method="post" style="margin-top:1em">
+<form action="/game/end" method="post" class="section-gap">
     <button type="submit">End Game</button>
 </form>
 

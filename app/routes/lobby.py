@@ -7,13 +7,52 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.game import GamePhase
+from app.game import GamePhase, GameState
 from app.musicbrainz import enrich_tracks
 
 logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
+
+
+def _lobby_status_message(game: GameState) -> str | None:
+    if game.playlist_tracks:
+        count = len(game.playlist_tracks)
+        if game.year_enrichment_done:
+            return f"Playlist loaded: {count} tracks. Release years verified."
+        return (
+            f"Playlist loaded: {count} tracks. "
+            "Fetching original release years..."
+        )
+    if not game.players:
+        return "Add at least one player to start."
+    return None
+
+
+def _lobby_message_context(
+    game: GameState,
+    *,
+    error: str | None = None,
+    message: str | None = None,
+    message_type: str = "status",
+) -> dict:
+    if error:
+        return {
+            "game": game,
+            "message": error,
+            "message_type": "error",
+            "enrichment_pending": False,
+        }
+    if message is None:
+        message = _lobby_status_message(game)
+    return {
+        "game": game,
+        "message": message,
+        "message_type": message_type,
+        "enrichment_pending": bool(game.playlist_tracks)
+        and not game.year_enrichment_done,
+    }
 
 
 @router.get("/lobby", response_class=HTMLResponse)
@@ -28,9 +67,10 @@ async def lobby(request: Request):
         request,
         "lobby.html",
         context={
-            "game": game,
-            "error": request.query_params.get("error"),
             "predefined_playlists": request.app.state.predefined_playlists,
+            **_lobby_message_context(
+                game, error=request.query_params.get("error")
+            ),
         },
     )
 
@@ -41,17 +81,24 @@ async def add_player(request: Request, player_name: str = Form(...)):
     name = player_name.strip()
     if not name:
         return templates.TemplateResponse(
-            request, "partials/player_list.html",
-            context={"game": game, "error": "Name cannot be empty"},
+            request,
+            "partials/lobby_player_update.html",
+            context=_lobby_message_context(
+                game, error="Name cannot be empty"
+            ),
         )
     if game.add_player(name) is None:
         return templates.TemplateResponse(
-            request, "partials/player_list.html",
-            context={"game": game, "error": f"'{name}' is already taken"},
+            request,
+            "partials/lobby_player_update.html",
+            context=_lobby_message_context(
+                game, error=f"'{name}' is already taken"
+            ),
         )
     return templates.TemplateResponse(
-        request, "partials/player_list.html",
-        context={"game": game},
+        request,
+        "partials/lobby_player_update.html",
+        context=_lobby_message_context(game),
     )
 
 
@@ -60,8 +107,9 @@ async def remove_player(request: Request, player_name: str = Form(...)):
     game = request.app.state.game
     game.remove_player(player_name)
     return templates.TemplateResponse(
-        request, "partials/player_list.html",
-        context={"game": game},
+        request,
+        "partials/lobby_player_update.html",
+        context=_lobby_message_context(game),
     )
 
 
@@ -83,8 +131,11 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
         tracks = await spotify.get_playlist_tracks(playlist_id)
         if not tracks:
             return templates.TemplateResponse(
-                request, "partials/playlist_info.html",
-                context={"track_count": 0, "error": "Playlist is empty or not found"},
+                request,
+                "partials/messages.html",
+                context=_lobby_message_context(
+                    game, error="Playlist is empty or not found"
+                ),
             )
         game.set_playlist(tracks)
         game.year_enrichment_done = False
@@ -92,24 +143,25 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
             _run_enrichment(game)
         )
         return templates.TemplateResponse(
-            request, "partials/playlist_info.html",
-            context={"track_count": len(tracks), "enrichment_done": False},
+            request,
+            "partials/messages.html",
+            context=_lobby_message_context(game),
         )
     except Exception as e:
         return templates.TemplateResponse(
-            request, "partials/playlist_info.html",
-            context={"track_count": 0, "error": str(e)},
+            request,
+            "partials/messages.html",
+            context=_lobby_message_context(game, error=str(e)),
         )
 
 
 @router.get("/lobby/enrichment-status", response_class=HTMLResponse)
 async def enrichment_status(request: Request):
     game = request.app.state.game
-    done = game.year_enrichment_done
-    track_count = len(game.playlist_tracks)
     return templates.TemplateResponse(
-        request, "partials/enrichment_status.html",
-        context={"enrichment_done": done, "track_count": track_count},
+        request,
+        "partials/messages_oob.html",
+        context=_lobby_message_context(game),
     )
 
 

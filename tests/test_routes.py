@@ -113,6 +113,10 @@ class TestLobbyRoutes:
         assert "Game Lobby" in resp.text
         assert "Rolling Stone 500 Best Songs Of All Time" in resp.text
         assert "Choose a playlist" in resp.text
+        assert "Loading playlist..." in resp.text
+        assert 'hx-disabled-elt="#playlist-setup, #lobby-controls"' in resp.text
+        assert "Add at least one player to start." in resp.text
+        assert '<button type="submit" disabled>Start Game</button>' in resp.text
 
     def test_add_player(self, authed_client: TestClient):
         with authed_client:
@@ -122,6 +126,8 @@ class TestLobbyRoutes:
             )
         assert resp.status_code == 200
         assert "Alice" in resp.text
+        assert '<button type="submit">Start Game</button>' in resp.text
+        assert "Add at least one player to start." not in resp.text
 
     def test_add_duplicate_player(self, authed_client: TestClient):
         with authed_client:
@@ -138,6 +144,7 @@ class TestLobbyRoutes:
             )
         assert resp.status_code == 200
         assert "Alice" not in resp.text
+        assert '<button type="submit" disabled>Start Game</button>' in resp.text
 
     def test_start_game_without_players(self, authed_client: TestClient):
         game = app.state.game

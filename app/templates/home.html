@@ -6,9 +6,11 @@
 <h2>Welcome to Musically!</h2>
 <p>A party song-guessing game.</p>
 
-{% if error %}
-<p><strong>Error:</strong> {{ error }}</p>
-{% endif %}
+<div id="game-messages" class="message-pane" aria-live="polite">
+    {% if error %}
+    <p class="message message--error">{{ error }}</p>
+    {% endif %}
+</div>
 
 <p>The host needs to log in with a Spotify Premium account to get started.</p>
 <a href="/login">Login with Spotify</a>

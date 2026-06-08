@@ -1,0 +1,81 @@
+.hidden {
+    display: none;
+}
+
+.inline-form {
+    display: inline;
+}
+
+.form-gap {
+    margin-top: 0.5em;
+}
+
+.section-gap {
+    margin-top: 1em;
+}
+
+.input-narrow {
+    width: 8em;
+}
+
+.data-table {
+    border-collapse: collapse;
+    border: 1px solid;
+}
+
+.data-table th,
+.data-table td {
+    padding: 4px;
+}
+
+.data-table--lg th,
+.data-table--lg td {
+    padding: 6px;
+}
+
+.message-pane {
+    margin-bottom: 1em;
+}
+
+.message {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.message--error {
+    color: red;
+}
+
+.vinyl-icon {
+    position: relative;
+    display: inline-block;
+    width: 1.2em;
+    height: 1.2em;
+    margin-left: 0.35em;
+    vertical-align: middle;
+}
+
+.vinyl-icon__disc {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    font-size: 1em;
+    line-height: 1;
+    animation: spin-disc 2s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes spin-disc {
+    from {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}

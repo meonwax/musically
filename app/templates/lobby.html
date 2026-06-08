@@ -2,58 +2,70 @@
 
 {% block title_suffix %} - Lobby{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/css/lobby.css">
+{% endblock %}
+
 {% block content %}
 <h2>Game Lobby</h2>
 
-{% if error %}
-<p><strong>Error:</strong> {{ error }}</p>
-{% endif %}
+<div id="game-messages" class="message-pane" aria-live="polite">
+    {% include "partials/messages.html" %}
+</div>
 
 <!-- Playlist Setup -->
 <h3>1. Set Playlist</h3>
-{% if predefined_playlists %}
-<form hx-post="/lobby/set-playlist" hx-target="#playlist-info" hx-swap="innerHTML">
-    <label for="predefined_playlist">Choose a playlist:</label>
-    <select name="playlist_url" id="predefined_playlist" required>
-        {% for playlist in predefined_playlists %}
-        <option value="{{ playlist.url }}">{{ playlist.name }}</option>
-        {% endfor %}
-    </select>
-    <button type="submit">Load Playlist</button>
-</form>
-<p>Or enter a custom playlist URL:</p>
-{% endif %}
-<form hx-post="/lobby/set-playlist" hx-target="#playlist-info" hx-swap="innerHTML">
-    <input type="text" name="playlist_url" placeholder="Spotify playlist URL or ID" size="60" required>
-    <button type="submit">Load Playlist</button>
-</form>
-<div id="playlist-info">
-    {% if game.playlist_tracks %}
-    <p>Playlist loaded: {{ game.playlist_tracks | length }} tracks</p>
+<fieldset id="playlist-setup">
+    <p id="playlist-loading-indicator" class="htmx-indicator" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        Loading playlist...
+    </p>
+    {% if predefined_playlists %}
+    <form hx-post="/lobby/set-playlist"
+          hx-target="#game-messages"
+          hx-swap="innerHTML"
+          hx-indicator="#playlist-loading-indicator"
+          hx-disabled-elt="#playlist-setup, #lobby-controls">
+        <label for="predefined_playlist">Choose a playlist:</label>
+        <select name="playlist_url" id="predefined_playlist" required>
+            {% for playlist in predefined_playlists %}
+            <option value="{{ playlist.url }}">{{ playlist.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Load Playlist</button>
+    </form>
+    <p>Or enter a custom playlist URL:</p>
     {% endif %}
-</div>
+    <form hx-post="/lobby/set-playlist"
+          hx-target="#game-messages"
+          hx-swap="innerHTML"
+          hx-indicator="#playlist-loading-indicator"
+          hx-disabled-elt="#playlist-setup, #lobby-controls">
+        <input type="text" name="playlist_url" placeholder="Spotify playlist URL or ID" size="60" required>
+        <button type="submit">Load Playlist</button>
+    </form>
+</fieldset>
 
 <hr>
 
-<!-- Player Registration -->
-<h3>2. Add Players</h3>
-<form hx-post="/lobby/add-player" hx-target="#player-list" hx-swap="innerHTML"
-      hx-on::after-request="this.reset(); this.querySelector('[name=player_name]').focus()">
-    <input type="text" name="player_name" placeholder="Player name" required>
-    <button type="submit">Add Player</button>
-</form>
-<div id="player-list">
-    {% include "partials/player_list.html" %}
-</div>
+<fieldset id="lobby-controls">
+    <!-- Player Registration -->
+    <h3>2. Add Players</h3>
+    <form hx-post="/lobby/add-player" hx-target="#player-list" hx-swap="innerHTML"
+          hx-on::after-request="this.reset(); this.querySelector('[name=player_name]').focus()">
+        <input type="text" name="player_name" placeholder="Player name" required>
+        <button type="submit">Add Player</button>
+    </form>
+    <div id="player-list">
+        {% include "partials/player_list.html" %}
+    </div>
 
-<hr>
+    <hr>
 
-<!-- Game Configuration & Start -->
-<h3>3. Start Game</h3>
-<form action="/lobby/start" method="post">
-    <label for="total_rounds">Number of rounds (0 = endless):</label>
-    <input type="number" name="total_rounds" id="total_rounds" value="10" min="0">
-    <br><br>
-    <button type="submit">Start Game</button>
-</form>
+    <!-- Game Configuration & Start -->
+    <h3>3. Start Game</h3>
+    <div id="start-game">
+        {% include "partials/start_game_form.html" %}
+    </div>
+</fieldset>
 {% endblock %}
