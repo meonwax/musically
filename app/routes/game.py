@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.game import GamePhase
 from app.matching import check_artist, check_guess, check_year
+
+logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
@@ -111,6 +115,7 @@ async def skip_turn(request: Request):
 async def next_round(request: Request):
     game = request.app.state.game
     if game.is_game_over():
+        logger.info("Last round complete, ending game")
         game.end_game()
         return RedirectResponse("/leaderboard", status_code=303)
     game.start_round()
@@ -146,5 +151,12 @@ async def play_track(request: Request, device_id: str = Form(...)):
     spotify = request.app.state.spotify
     game.device_id = device_id
     if game.current_round:
-        await spotify.play_track(game.current_round.track.uri, device_id)
+        track = game.current_round.track
+        logger.info(
+            "Playback requested: round=%d device=%s track=%r",
+            game.round_number,
+            device_id,
+            track.name,
+        )
+        await spotify.play_track(track.uri, device_id)
     return HTMLResponse("")

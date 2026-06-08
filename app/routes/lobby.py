@@ -61,6 +61,7 @@ async def lobby(request: Request):
         return RedirectResponse("/")
     game = request.app.state.game
     if game.phase not in (GamePhase.LOBBY, GamePhase.FINISHED):
+        logger.info("Lobby entered during %s, resetting game", game.phase.name)
         game.reset()
     game.phase = GamePhase.LOBBY
     return templates.TemplateResponse(
@@ -120,6 +121,10 @@ async def _run_enrichment(game) -> None:
         logger.exception("Year enrichment failed")
     finally:
         game.year_enrichment_done = True
+        logger.info(
+            "Year enrichment complete for %d tracks",
+            len(game.playlist_tracks),
+        )
 
 
 @router.post("/lobby/set-playlist", response_class=HTMLResponse)
@@ -130,6 +135,7 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
         playlist_id = spotify.extract_playlist_id(playlist_url)
         tracks = await spotify.get_playlist_tracks(playlist_id)
         if not tracks:
+            logger.warning("Playlist empty or not found: %s", playlist_id)
             return templates.TemplateResponse(
                 request,
                 "partials/messages.html",
@@ -148,6 +154,7 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
             context=_lobby_message_context(game),
         )
     except Exception as e:
+        logger.exception("Failed to load playlist from %r", playlist_url)
         return templates.TemplateResponse(
             request,
             "partials/messages.html",
@@ -169,8 +176,10 @@ async def enrichment_status(request: Request):
 async def start_game(request: Request, total_rounds: str = Form("0")):
     game = request.app.state.game
     if len(game.players) < 1:
+        logger.warning("Start game rejected: no players")
         return RedirectResponse("/lobby?error=Need+at+least+one+player", status_code=303)
     if not game.playlist_tracks:
+        logger.warning("Start game rejected: no playlist")
         return RedirectResponse("/lobby?error=Set+a+playlist+first", status_code=303)
 
     rounds = int(total_rounds) if total_rounds.isdigit() else 0

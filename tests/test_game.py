@@ -151,9 +151,16 @@ class TestGameStateRounds:
         assert game_playing.current_round.track is not None
         assert game_playing.round_number == 1
 
-    def test_start_round_shuffles_player_order(self, game_playing: GameState):
-        rnd = game_playing.current_round
-        assert set(rnd.player_order) == {"Alice", "Bob", "Charlie"}
+    def test_start_round_rotates_first_player(self, game_ready: GameState):
+        game_ready.start_game()
+        rnd1 = game_ready.start_round()
+        assert rnd1.player_order == ["Alice", "Bob", "Charlie"]
+        game_ready.finish_round()
+        rnd2 = game_ready.start_round()
+        assert rnd2.player_order == ["Bob", "Charlie", "Alice"]
+        game_ready.finish_round()
+        rnd3 = game_ready.start_round()
+        assert rnd3.player_order == ["Charlie", "Alice", "Bob"]
 
     def test_start_round_no_repeat_tracks(self, game_ready: GameState):
         game_ready.total_rounds = 5
