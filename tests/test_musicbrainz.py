@@ -93,6 +93,24 @@ class TestLookupOriginalYear:
         year = await lookup_original_year("Song", "Artist", client=mock_client)
         assert year == 1985
 
+    async def test_query_uses_clean_title(self):
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get = AsyncMock(return_value=_mb_response([]))
+
+        await lookup_original_year(
+            "Bohemian Rhapsody - Remastered 2011", "Queen", client=mock_client
+        )
+        query = mock_client.get.call_args.kwargs["params"]["query"]
+        assert query == 'recording:"Bohemian Rhapsody" AND artist:"Queen"'
+
+    async def test_query_escapes_quotes(self):
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get = AsyncMock(return_value=_mb_response([]))
+
+        await lookup_original_year('Say "Hi"', "Artist", client=mock_client)
+        query = mock_client.get.call_args.kwargs["params"]["query"]
+        assert query == 'recording:"Say \\"Hi\\"" AND artist:"Artist"'
+
     async def test_returns_none_when_all_dates_invalid(self):
         resp = _mb_response([
             _recording(""),

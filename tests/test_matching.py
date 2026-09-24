@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.matching import check_artist, check_guess, check_year, normalize
+from app.matching import check_artist, check_guess, check_year, clean_title, normalize
 
 
 class TestNormalize:
@@ -32,6 +32,29 @@ class TestNormalize:
 
     def test_only_punctuation(self):
         assert normalize("!!!") == ""
+
+    def test_strips_spotify_version_suffix(self):
+        assert normalize("Help! - Remastered 2009") == "help"
+
+    def test_strips_leading_the(self):
+        assert normalize("The Beatles") == "beatles"
+
+    def test_keeps_lone_the(self):
+        assert normalize("The") == "the"
+
+
+class TestCleanTitle:
+    def test_version_suffix(self):
+        assert clean_title("Bohemian Rhapsody - Remastered 2011") == "Bohemian Rhapsody"
+
+    def test_bracketed_parts(self):
+        assert clean_title("Song (feat. Artist) [Live]") == "Song"
+
+    def test_keeps_case_and_punctuation(self):
+        assert clean_title("Don't Stop Me Now - 2011 Mix") == "Don't Stop Me Now"
+
+    def test_hyphen_without_spaces_is_kept(self):
+        assert clean_title("Anti-Hero") == "Anti-Hero"
 
 
 class TestCheckGuess:
@@ -74,6 +97,26 @@ class TestCheckGuess:
     def test_very_similar(self):
         assert check_guess("Hotel Calfornia", "Hotel California") is True
 
+    @pytest.mark.parametrize(
+        "guess,target",
+        [
+            ("love", "Crazy Little Thing Called Love"),
+            ("heaven", "Stairway to Heaven"),
+            ("a", "A Hard Day's Night"),
+            ("jude", "Hey Jude"),
+        ],
+    )
+    def test_single_word_from_title_is_not_enough(self, guess: str, target: str):
+        assert check_guess(guess, target) is False
+
+    def test_ignores_spotify_version_suffix(self):
+        assert check_guess("Bohemian Rhapsody", "Bohemian Rhapsody - Remastered 2011") is True
+
+    def test_leading_bracket_optional(self):
+        target = "(I Can't Get No) Satisfaction - Mono Version"
+        assert check_guess("Satisfaction", target) is True
+        assert check_guess("I can't get no satisfaction", target) is True
+
 
 class TestCheckArtist:
     def test_exact_artist_match(self):
@@ -105,6 +148,12 @@ class TestCheckArtist:
 
     def test_partial_artist_typo(self):
         assert check_artist("Led Zepelin", ["Led Zeppelin"]) is True
+
+    def test_leading_the_optional(self):
+        assert check_artist("Who", ["The Who"]) is True
+
+    def test_lone_the_does_not_match(self):
+        assert check_artist("the", ["The Rolling Stones"]) is False
 
 
 class TestCheckYear:

@@ -6,12 +6,19 @@ import logging
 import httpx
 
 from app.game import Track
+from app.matching import clean_title
 
 logger = logging.getLogger(__name__)
 
 MB_API_BASE = "https://musicbrainz.org/ws/2"
 MB_USER_AGENT = "Musically/0.1 (https://github.com/musically-game)"
 REQUEST_DELAY = 1.0  # MusicBrainz rate-limit: 1 req/s
+
+
+def _quote(value: str) -> str:
+    """Build a Lucene phrase literal."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 async def lookup_original_year(
@@ -21,7 +28,7 @@ async def lookup_original_year(
     client: httpx.AsyncClient | None = None,
 ) -> int | None:
     """Search MusicBrainz recordings and return the earliest release year found."""
-    query = f'recording:"{title}" AND artist:"{artist}"'
+    query = f"recording:{_quote(clean_title(title))} AND artist:{_quote(artist)}"
     params = {"query": query, "fmt": "json", "limit": 100}
 
     own_client = client is None

@@ -4,41 +4,47 @@ import re
 
 from thefuzz import fuzz
 
+# Spotify appends version info after " - ", e.g. "Help! - Remastered 2009".
+_VERSION_SUFFIX = re.compile(r"\s+-\s+.*$")
+_BRACKETED = re.compile(r"\(.*?\)|\[.*?\]")
+
+
+def clean_title(title: str) -> str:
+    """Strip version suffixes and bracketed parts like "(feat. X)" from a title."""
+    title = _VERSION_SUFFIX.sub("", title)
+    title = _BRACKETED.sub(" ", title)
+    return re.sub(r"\s+", " ", title).strip()
+
+
+def _simplify(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"^the ", "", text)
+
 
 def normalize(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"\s*\(.*?\)\s*", " ", text)  # remove parenthesised parts
-    text = re.sub(r"\s*\[.*?\]\s*", " ", text)  # remove bracketed parts
-    text = re.sub(r"[^\w\s]", "", text)  # strip punctuation
-    text = re.sub(r"\s+", " ", text).strip()  # collapse whitespace
-    return text
+    return _simplify(clean_title(text))
+
+
+def _target_variants(target: str) -> set[str]:
+    # Titles like "(I Can't Get No) Satisfaction" should match with or
+    # without the bracketed part.
+    return {normalize(target), _simplify(_VERSION_SUFFIX.sub("", target))}
 
 
 def check_guess(guess: str, target: str, threshold: int = 75) -> bool:
     g = normalize(guess)
-    t = normalize(target)
-
     if not g:
         return False
-
-    ratio = fuzz.token_sort_ratio(g, t)
-    if ratio >= threshold:
-        return True
-
-    if fuzz.partial_ratio(g, t) >= threshold + 10:
-        return True
-
-    return False
+    return any(
+        fuzz.token_sort_ratio(g, t) >= threshold for t in _target_variants(target)
+    )
 
 
 def check_artist(guess: str, artists: list[str], threshold: int = 75) -> bool:
     """Match the guess against any of the track's artists."""
-    if not guess or not guess.strip():
-        return False
-    for artist in artists:
-        if check_guess(guess, artist, threshold):
-            return True
-    return False
+    return any(check_guess(guess, artist, threshold) for artist in artists)
 
 
 def check_year(guess: int | None, actual: int | None) -> bool:
