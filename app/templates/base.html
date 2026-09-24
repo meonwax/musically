@@ -12,5 +12,17 @@
     <h1>Musically</h1>
     <hr>
     {% block content %}{% endblock %}
+    <footer class="site-footer">
+        <hr>
+        {# New tabs, so following a link mid-game keeps the Spotify player alive. #}
+        <p>Musically v{{ project.version }}</p>
+        <p>
+            <a href="{{ project.repository }}" target="_blank" rel="noopener">Source</a>
+            · <a href="{{ project.repository }}/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+            · Powered by:
+            <a href="https://www.spotify.com" target="_blank" rel="noopener">Spotify</a>,
+            <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>
+        </p>
+    </footer>
 </body>
 </html>

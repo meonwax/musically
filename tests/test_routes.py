@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -12,6 +13,7 @@ from app.game import GamePhase, GameState
 from app.main import app
 from app.routes.lobby import _restart_enrichment, _run_enrichment
 from app.spotify import SpotifyTokens
+from app.templating import load_project_info
 from tests.conftest import sample_tracks
 
 
@@ -79,6 +81,17 @@ class TestHomeRoute:
         with authed_client:
             resp = authed_client.get("/")
         assert "Login with Spotify" in resp.text
+
+    def test_footer_shows_project_info(self, client: TestClient):
+        project = load_project_info()
+        assert re.fullmatch(r"\d+\.\d+\.\d+", project.version)
+        with client:
+            resp = client.get("/")
+        assert '<footer class="site-footer">' in resp.text
+        assert f"Musically v{project.version}" in resp.text
+        assert f'href="{project.repository}"' in resp.text
+        assert f'href="{project.repository}/blob/main/LICENSE"' in resp.text
+        assert "https://musicbrainz.org" in resp.text
 
 
 class TestAuthRoutes:

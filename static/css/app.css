@@ -55,6 +55,20 @@
     font-family: monospace;
 }
 
+.site-footer {
+    margin-top: 2em;
+    font-size: 0.85em;
+    color: #666;
+}
+
+.site-footer p {
+    margin: 0.25em 0;
+}
+
+.site-footer a {
+    color: inherit;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);

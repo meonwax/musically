@@ -1,6 +1,6 @@
 [project]
 name = "musically"
-version = "0.1.0"
+version = "0.2.0"
 description = "A party-mode song guessing game"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
@@ -14,6 +14,9 @@ dependencies = [
     "thefuzz[speedup]>=0.22.1",
     "uvicorn[standard]>=0.44.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/meonwax/musically"
 
 [dependency-groups]
 dev = [

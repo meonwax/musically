@@ -26,6 +26,11 @@ See `docs/architecture.md` for the full architecture and design plan.
 - Configuration is loaded from environment variables via `app/config.py` and `.env`.
 - Do not commit `.env` or secrets. Use `.env.example` as the template.
 
+## Versioning
+
+- The version in `pyproject.toml` is shown in the page footer. Bump it in every commit that changes the app (code, templates, static files, `config.toml`, `Dockerfile`), not for commits that only touch docs or tests.
+- Bump with `uv version --bump minor` for new features and `uv version --bump patch` for fixes and small tweaks. This updates `pyproject.toml` and `uv.lock` together; commit both.
+
 ## Code Style
 
 - Use `from __future__ import annotations` in all Python files.
