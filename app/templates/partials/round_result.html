@@ -1,7 +1,7 @@
 <h3>Round {{ game.round_number }} Results</h3>
 
 <p>
-    <strong>Answer:</strong> {{ round.track.name }}
+    <strong>Answer:</strong> {{ round.track.display_name }}
     — by {{ round.track.artists | join(", ") }}
     {% if round.track.year %} ({{ round.track.year }}){% endif %}
 </p>

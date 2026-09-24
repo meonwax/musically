@@ -93,6 +93,7 @@ Implemented in `app/matching.py`:
 - There is deliberately no substring matching, so a single word from a longer title (e.g. "love") does not count
 - Artist guesses match if they fit any of the track's artists
 - Years must match exactly
+- The round result shows the title without version info (`" - Remastered 2012"`, `"(Radio Edit)"`), but keeps other bracketed parts like `"(feat. X)"`
 
 ## Scoring
 

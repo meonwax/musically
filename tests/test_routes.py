@@ -407,6 +407,16 @@ class TestGameRoutes:
         assert game.phase == GamePhase.ROUND_RESULT
         assert "Answer" in resp.text or "Result" in resp.text
 
+    def test_result_hides_version_info_in_title(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.current_round.track.name = "1979 - Remastered 2012"
+        with authed_client:
+            for _ in range(len(game.current_round.player_order)):
+                resp = authed_client.post("/game/skip")
+        assert game.phase == GamePhase.ROUND_RESULT
+        assert "1979" in resp.text
+        assert "Remastered" not in resp.text
+
     @staticmethod
     def _finish_round(game) -> None:
         for _ in range(len(game.current_round.player_order)):

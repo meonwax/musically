@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.matching import check_artist, check_guess, check_year, clean_title, normalize
+from app.matching import (
+    check_artist,
+    check_guess,
+    check_year,
+    clean_title,
+    display_title,
+    normalize,
+)
 
 
 class TestNormalize:
@@ -55,6 +62,24 @@ class TestCleanTitle:
 
     def test_hyphen_without_spaces_is_kept(self):
         assert clean_title("Anti-Hero") == "Anti-Hero"
+
+
+class TestDisplayTitle:
+    @pytest.mark.parametrize(
+        ("title", "expected"),
+        [
+            ("1979 - Remastered 2012", "1979"),
+            ("Let It Be (Remastered 2009)", "Let It Be"),
+            ("Paint It Black [Mono Version]", "Paint It Black"),
+            ("Song (Radio Edit)", "Song"),
+            ("Song (feat. Artist)", "Song (feat. Artist)"),
+            ("(I Can't Get No) Satisfaction", "(I Can't Get No) Satisfaction"),
+            ("Anti-Hero", "Anti-Hero"),
+            ("(Remastered)", "(Remastered)"),
+        ],
+    )
+    def test_strips_only_version_info(self, title: str, expected: str):
+        assert display_title(title) == expected
 
 
 class TestCheckGuess:

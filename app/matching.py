@@ -7,6 +7,10 @@ from thefuzz import fuzz
 # Spotify appends version info after " - ", e.g. "Help! - Remastered 2009".
 _VERSION_SUFFIX = re.compile(r"\s+-\s+.*$")
 _BRACKETED = re.compile(r"\(.*?\)|\[.*?\]")
+_BRACKETED_VERSION = re.compile(
+    r"\s*[(\[][^)\]]*\b(?:remaster\w*|version|edit|mono|stereo|mix)\b[^)\]]*[)\]]",
+    re.IGNORECASE,
+)
 
 
 def clean_title(title: str) -> str:
@@ -14,6 +18,12 @@ def clean_title(title: str) -> str:
     title = _VERSION_SUFFIX.sub("", title)
     title = _BRACKETED.sub(" ", title)
     return re.sub(r"\s+", " ", title).strip()
+
+
+def display_title(title: str) -> str:
+    """Strip version info like " - Remastered 2012" but keep the rest of the title."""
+    stripped = _BRACKETED_VERSION.sub("", _VERSION_SUFFIX.sub("", title))
+    return re.sub(r"\s+", " ", stripped).strip() or title
 
 
 def _simplify(text: str) -> str:

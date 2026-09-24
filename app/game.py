@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from app.game_config import ScoringConfig
-from app.matching import check_artist, check_guess, check_year
+from app.matching import check_artist, check_guess, check_year, display_title
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,10 @@ class Track:
     name: str
     artists: list[str]
     year: int | None = None
+
+    @property
+    def display_name(self) -> str:
+        return display_title(self.name)
 
 
 @dataclass
