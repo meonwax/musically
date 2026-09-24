@@ -54,14 +54,40 @@ window.onSpotifyWebPlaybackSDKReady = () => {
     document.addEventListener("click", unlockAudio, true);
     document.addEventListener("submit", unlockAudio, true);
 
+    // activateElement() only unlocks the SDK's media element before a song is
+    // loaded, so some browsers (e.g. Brave blocking autoplay) keep refusing
+    // after the first song failed. Then only the site settings can help.
+    const RETRY_TIMEOUT_MS = 5000;
+    let retriedAfterTap = false;
+    let blockedByBrowser = false;
+
+    function showBlockedHint() {
+        blockedByBrowser = true;
+        setPlayerStatus(
+            "Your browser blocked playback. Allow autoplay for this site "
+            + "in the browser's site settings, then reload the page.",
+            true,
+        );
+    }
+
     player.addListener("autoplay_failed", () => {
         unlocked = false;
+        if (retriedAfterTap) {
+            showBlockedHint();
+            return;
+        }
         startMusic.classList.remove("hidden");
     });
 
     startMusic.addEventListener("click", () => {
         startMusic.classList.add("hidden");
-        player.resume();
+        retriedAfterTap = true;
+        document.getElementById("play-track-form").requestSubmit();
+        setTimeout(() => {
+            if (retriedAfterTap && !blockedByBrowser) {
+                showBlockedHint();
+            }
+        }, RETRY_TIMEOUT_MS);
     });
 
     // The SDK only reports the position when the state changes, so the
@@ -91,7 +117,12 @@ window.onSpotifyWebPlaybackSDKReady = () => {
             reportedAt: performance.now(),
         };
         if (!state.paused) {
+            retriedAfterTap = false;
+            blockedByBrowser = false;
             startMusic.classList.add("hidden");
+        }
+        if (blockedByBrowser) {
+            return;
         }
         showPlayback(state.paused);
         renderElapsed();

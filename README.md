@@ -168,6 +168,11 @@ docker --context musically-prod compose up -d --build
    updated.
 6. At the end, the final leaderboard shows the winner.
 
+On phones, browsers block audio that doesn't start from a tap. If the first
+song stays paused, tap "Tap to start the music". Browsers that block autoplay
+strictly, such as Brave, may still refuse. In that case, allow autoplay for
+the site in the browser's site settings and reload.
+
 ## Scoring
 
 Points are configured in the `[points]` table of `config.toml`. The defaults:
