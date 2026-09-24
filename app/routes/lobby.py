@@ -3,16 +3,16 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app.game import GamePhase, GameState
 from app.musicbrainz import enrich_tracks
+from app.routes.auth import is_logged_in
+from app.templating import templates
 
 logger = logging.getLogger(__name__)
 
-templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
 
 
@@ -57,7 +57,7 @@ def _lobby_message_context(
 
 @router.get("/lobby", response_class=HTMLResponse)
 async def lobby(request: Request):
-    if not request.session.get("authenticated"):
+    if not is_logged_in(request):
         return RedirectResponse("/")
     game = request.app.state.game
     if game.phase not in (GamePhase.LOBBY, GamePhase.FINISHED):
@@ -114,17 +114,25 @@ async def remove_player(request: Request, player_name: str = Form(...)):
     )
 
 
-async def _run_enrichment(game) -> None:
+async def _run_enrichment(game: GameState) -> None:
     try:
         await enrich_tracks(game.playlist_tracks)
     except Exception:
         logger.exception("Year enrichment failed")
-    finally:
-        game.year_enrichment_done = True
-        logger.info(
-            "Year enrichment complete for %d tracks",
-            len(game.playlist_tracks),
-        )
+    # Not in a `finally`: a cancelled run must not mark a newer playlist done.
+    game.year_enrichment_done = True
+    logger.info(
+        "Year enrichment complete for %d tracks",
+        len(game.playlist_tracks),
+    )
+
+
+def _restart_enrichment(app: FastAPI, game: GameState) -> None:
+    previous: asyncio.Task | None = app.state.enrichment_task
+    if previous is not None and not previous.done():
+        logger.info("Cancelling year enrichment for previous playlist")
+        previous.cancel()
+    app.state.enrichment_task = asyncio.create_task(_run_enrichment(game))
 
 
 @router.post("/lobby/set-playlist", response_class=HTMLResponse)
@@ -140,14 +148,14 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
                 request,
                 "partials/messages.html",
                 context=_lobby_message_context(
-                    game, error="Playlist is empty or not found"
+                    game,
+                    error="Playlist is empty or not found. In Development "
+                    "Mode, Spotify only returns playlists you own or "
+                    "collaborate on.",
                 ),
             )
         game.set_playlist(tracks)
-        game.year_enrichment_done = False
-        request.app.state.enrichment_task = asyncio.create_task(
-            _run_enrichment(game)
-        )
+        _restart_enrichment(request.app, game)
         return templates.TemplateResponse(
             request,
             "partials/messages.html",

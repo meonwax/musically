@@ -9,7 +9,7 @@ from app.game import (
     compute_points,
 )
 from app.game_config import ScoringConfig
-from tests.conftest import SAMPLE_TRACKS
+from tests.conftest import sample_tracks
 
 DEFAULT_SCORING = ScoringConfig(song=1, artist=1, year_multiplier=2)
 
@@ -117,17 +117,17 @@ class TestGameStatePlayers:
 
 class TestGameStatePlaylist:
     def test_set_playlist(self, game: GameState):
-        game.set_playlist(SAMPLE_TRACKS)
+        game.set_playlist(sample_tracks())
         assert len(game.playlist_tracks) == 5
-        assert len(game.available_tracks) == 5
 
-    def test_set_playlist_creates_track_objects(self, game: GameState):
-        game.set_playlist(SAMPLE_TRACKS[:1])
-        t = game.playlist_tracks[0]
-        assert t.uri == "spotify:track:1"
-        assert t.name == "Bohemian Rhapsody"
-        assert t.artists == ["Queen"]
-        assert t.year == 1975
+    def test_set_playlist_resets_enrichment(self, game: GameState):
+        game.year_enrichment_done = True
+        game.set_playlist(sample_tracks())
+        assert game.year_enrichment_done is False
+
+    def test_start_game_fills_available_tracks(self, game_ready: GameState):
+        game_ready.start_game()
+        assert len(game_ready.available_tracks) == 5
 
 
 class TestGameStateRounds:
@@ -155,10 +155,8 @@ class TestGameStateRounds:
         game_ready.start_game()
         rnd1 = game_ready.start_round()
         assert rnd1.player_order == ["Alice", "Bob", "Charlie"]
-        game_ready.finish_round()
         rnd2 = game_ready.start_round()
         assert rnd2.player_order == ["Bob", "Charlie", "Alice"]
-        game_ready.finish_round()
         rnd3 = game_ready.start_round()
         assert rnd3.player_order == ["Charlie", "Alice", "Bob"]
 
@@ -173,7 +171,7 @@ class TestGameStateRounds:
 
     def test_start_round_recycles_when_exhausted(self, game: GameState):
         game.add_player("Alice")
-        game.set_playlist(SAMPLE_TRACKS[:1])
+        game.set_playlist(sample_tracks()[:1])
         game.total_rounds = 0
         game.start_game()
         rnd1 = game.start_round()
@@ -189,92 +187,114 @@ class TestGameStateRounds:
 
 
 class TestGameStateGuessing:
-    def _guess(self, game, player, song_ok=False, artist_ok=False, year_ok=False):
-        game.record_guess(
-            player, "sg", "ag", 2000,
-            song_correct=song_ok, artist_correct=artist_ok, year_correct=year_ok,
-        )
+    def _player(self, game: GameState, name: str) -> Player:
+        return next(p for p in game.players if p.name == name)
 
-    def test_record_song_correct(self, game_playing: GameState):
+    def test_correct_song(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        self._guess(game_playing, player, song_ok=True)
-        p = next(p for p in game_playing.players if p.name == player)
+        g = game_playing.submit_guess(rnd.track.name, "", None)
+        assert g.song_correct is True
+        assert g.points == 1
+        p = self._player(game_playing, player)
         assert p.score == 1
         assert p.correct_songs == 1
         assert p.correct_artists == 0
         assert p.correct_years == 0
-        assert rnd.guesses[0].song_correct is True
-        assert rnd.guesses[0].points == 1
 
-    def test_record_artist_correct(self, game_playing: GameState):
+    def test_correct_artist(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        self._guess(game_playing, player, artist_ok=True)
-        p = next(p for p in game_playing.players if p.name == player)
-        assert p.score == 1
-        assert rnd.guesses[0].artist_correct is True
+        g = game_playing.submit_guess("", rnd.track.artists[0], None)
+        assert g.artist_correct is True
+        assert self._player(game_playing, player).score == 1
 
-    def test_record_song_and_artist(self, game_playing: GameState):
+    def test_song_and_artist(self, game_playing: GameState):
         rnd = game_playing.current_round
-        player = rnd.current_player
-        self._guess(game_playing, player, song_ok=True, artist_ok=True)
-        p = next(p for p in game_playing.players if p.name == player)
-        assert p.score == 2
+        g = game_playing.submit_guess(rnd.track.name, rnd.track.artists[0], None)
+        assert g.points == 2
 
     def test_year_doubles_points(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        self._guess(game_playing, player, song_ok=True, artist_ok=True, year_ok=True)
-        p = next(p for p in game_playing.players if p.name == player)
+        g = game_playing.submit_guess(
+            rnd.track.name, rnd.track.artists[0], rnd.track.year
+        )
+        assert g.year_correct is True
+        assert g.points == 4
+        p = self._player(game_playing, player)
         assert p.score == 4
         assert p.correct_songs == 1
         assert p.correct_artists == 1
         assert p.correct_years == 1
-        assert rnd.guesses[0].points == 4
+
+    def test_uses_configured_scoring(self, game_ready: GameState):
+        game_ready.scoring = ScoringConfig(song=2, artist=3, year_multiplier=4)
+        game_ready.start_game()
+        rnd = game_ready.start_round()
+        g = game_ready.submit_guess(
+            rnd.track.name, rnd.track.artists[0], rnd.track.year
+        )
+        assert g.points == 20
 
     def test_year_alone_gives_zero(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        self._guess(game_playing, player, year_ok=True)
-        p = next(p for p in game_playing.players if p.name == player)
-        assert p.score == 0
+        g = game_playing.submit_guess("", "", rnd.track.year)
+        assert g.year_correct is True
+        assert g.points == 0
+        assert self._player(game_playing, player).correct_years == 1
 
-    def test_record_wrong_guess(self, game_playing: GameState):
+    def test_wrong_guess(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        self._guess(game_playing, player)
-        p = next(p for p in game_playing.players if p.name == player)
-        assert p.score == 0
+        g = game_playing.submit_guess("zzzz", "zzzz", 1800)
+        assert g.points == 0
+        assert self._player(game_playing, player).score == 0
+
+    def test_guess_is_attributed_to_current_player(self, game_playing: GameState):
+        rnd = game_playing.current_round
+        player = rnd.current_player
+        g = game_playing.submit_guess("x", "", None)
+        assert g.player_name == player
 
     def test_skip_turn(self, game_playing: GameState):
         rnd = game_playing.current_round
         player = rnd.current_player
-        game_playing.skip_turn(player)
+        g = game_playing.skip_turn()
+        assert g.player_name == player
         assert rnd.guesses[0].song_guess == "(skipped)"
         assert rnd.guesses[0].points == 0
 
-    def test_record_guess_advances_player(self, game_playing: GameState):
+    def test_guess_advances_player(self, game_playing: GameState):
         rnd = game_playing.current_round
         first = rnd.current_player
-        self._guess(game_playing, first)
-        assert rnd.current_player != first or len(rnd.player_order) == 1
+        game_playing.submit_guess("x", "", None)
+        assert rnd.current_player != first
 
-    def test_all_guessed_after_all_players(self, game_playing: GameState):
+    def test_last_guess_finishes_round(self, game_playing: GameState):
+        rnd = game_playing.current_round
+        for _ in range(len(rnd.player_order) - 1):
+            game_playing.submit_guess("x", "", None)
+        assert game_playing.phase == GamePhase.PLAYING
+        game_playing.skip_turn()
+        assert rnd.all_guessed is True
+        assert game_playing.phase == GamePhase.ROUND_RESULT
+
+    def test_guess_after_round_complete_is_ignored(self, game_playing: GameState):
         rnd = game_playing.current_round
         for _ in range(len(rnd.player_order)):
-            self._guess(game_playing, rnd.current_player)
-        assert rnd.all_guessed is True
+            game_playing.skip_turn()
+        assert game_playing.submit_guess("x", "", None) is None
+        assert game_playing.skip_turn() is None
+        assert len(rnd.guesses) == len(rnd.player_order)
 
-    def test_record_guess_noop_without_round(self, game: GameState):
-        game.record_guess("Nobody", "s", "a", None, False, False, False)
+    def test_guess_without_round_is_noop(self, game: GameState):
+        assert game.submit_guess("s", "a", None) is None
+        assert game.skip_turn() is None
 
 
 class TestGameStateScoring:
-    def test_finish_round_sets_phase(self, game_playing: GameState):
-        game_playing.finish_round()
-        assert game_playing.phase == GamePhase.ROUND_RESULT
-
     def test_is_game_over_endless(self, game_playing: GameState):
         game_playing.total_rounds = 0
         assert game_playing.is_game_over() is False
@@ -311,5 +331,4 @@ class TestGameStateReset:
         assert game_playing.round_number == 0
         assert game_playing.total_rounds == 0
         assert game_playing.phase == GamePhase.LOBBY
-        assert game_playing.device_id is None
         assert game_playing.year_enrichment_done is False

@@ -27,8 +27,6 @@ class Settings:
         "playlist-read-collaborative"
     )
 
-    fuzzy_match_threshold: int = 75
-
 
 def get_settings() -> Settings:
     return Settings(

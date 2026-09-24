@@ -12,6 +12,10 @@
     {% endif %}
 </div>
 
+{% if logged_in %}
+<a href="/lobby">Go to Lobby</a>
+{% else %}
 <p>The host needs to log in with a Spotify Premium account to get started.</p>
 <a href="/login">Login with Spotify</a>
+{% endif %}
 {% endblock %}

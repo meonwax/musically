@@ -22,6 +22,7 @@ See `docs/architecture.md` for the full architecture and design plan.
 - Full-page templates extend `base.html`.
 - Game state lives in `app/game.py` as dataclasses. There is no database.
 - Spotify API interaction is encapsulated in `app/spotify.py`.
+- Routes render through the shared `templates` instance in `app/templating.py`.
 - Configuration is loaded from environment variables via `app/config.py` and `.env`.
 - Do not commit `.env` or secrets. Use `.env.example` as the template.
 
@@ -37,10 +38,12 @@ See `docs/architecture.md` for the full architecture and design plan.
 
 - Run tests with `uv run pytest` (config in `pyproject.toml`).
 - Tests live in `tests/` and mirror the `app/` structure:
-  - `test_game.py` — unit tests for game state and logic
-  - `test_matching.py` — unit tests for fuzzy matching
-  - `test_spotify.py` — unit tests for Spotify client (extract_playlist_id, tokens, auth URL)
-  - `test_routes.py` — integration tests for all HTTP routes using FastAPI TestClient
+  - `test_game.py`: unit tests for game state and logic
+  - `test_game_config.py`: unit tests for loading `config.toml`
+  - `test_matching.py`: unit tests for fuzzy matching
+  - `test_musicbrainz.py`: unit tests for the release year lookup (HTTP mocked)
+  - `test_spotify.py`: unit tests for Spotify client (playlist parsing, tokens, auth URL)
+  - `test_routes.py`: integration tests for all HTTP routes using FastAPI TestClient
 - Shared fixtures are in `tests/conftest.py` (game states, settings, mock Spotify tokens).
 - Async tests use `pytest-asyncio` with `asyncio_mode = "auto"`.
 - When changing source code, always update or extend the corresponding tests and run the full suite before considering the task done.

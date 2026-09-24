@@ -10,17 +10,18 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 import pytest
 
 from app.config import Settings
-from app.game import GameState
+from app.game import GameState, Track
 from app.spotify import SpotifyClient, SpotifyTokens
 
 
-SAMPLE_TRACKS = [
-    {"uri": "spotify:track:1", "name": "Bohemian Rhapsody", "artists": ["Queen"], "year": 1975},
-    {"uri": "spotify:track:2", "name": "Stairway to Heaven", "artists": ["Led Zeppelin"], "year": 1971},
-    {"uri": "spotify:track:3", "name": "Hotel California", "artists": ["Eagles"], "year": 1977},
-    {"uri": "spotify:track:4", "name": "Imagine", "artists": ["John Lennon"], "year": 1971},
-    {"uri": "spotify:track:5", "name": "Smells Like Teen Spirit", "artists": ["Nirvana"], "year": 1991},
-]
+def sample_tracks() -> list[Track]:
+    return [
+        Track(uri="spotify:track:1", name="Bohemian Rhapsody", artists=["Queen"], year=1975),
+        Track(uri="spotify:track:2", name="Stairway to Heaven", artists=["Led Zeppelin"], year=1971),
+        Track(uri="spotify:track:3", name="Hotel California", artists=["Eagles"], year=1977),
+        Track(uri="spotify:track:4", name="Imagine", artists=["John Lennon"], year=1971),
+        Track(uri="spotify:track:5", name="Smells Like Teen Spirit", artists=["Nirvana"], year=1991),
+    ]
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ def game_with_players(game: GameState) -> GameState:
 
 @pytest.fixture
 def game_ready(game_with_players: GameState) -> GameState:
-    game_with_players.set_playlist(SAMPLE_TRACKS)
+    game_with_players.set_playlist(sample_tracks())
     return game_with_players
 
 

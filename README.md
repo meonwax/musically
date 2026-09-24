@@ -1,14 +1,15 @@
 # Musically
 
-A party-mode song guessing game. Players share one device,
-a song plays from a Spotify playlist, and each player takes turns guessing the
-song name.
+A party-mode song guessing game. Players share one device, a song plays from
+a Spotify playlist, and each player takes turns guessing the song title,
+artist and release year.
 
 ## Prerequisites
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) package manager
-- A Spotify Premium account
+- A Spotify Premium account (Spotify requires Premium for both the Web
+  Playback SDK and for Development Mode apps)
 - A Spotify Developer application (create one at https://developer.spotify.com/dashboard)
 
 ## Setup (local development)
@@ -27,6 +28,8 @@ cp .env.example .env
 
 3. In your Spotify Developer Dashboard, add the redirect URI
    (`http://127.0.0.1:8000/callback` by default) to your app's settings.
+   In Development Mode, a host who isn't the app owner must be added under
+   "User Management".
 
 4. Run the server:
 
@@ -35,6 +38,9 @@ uv run uvicorn app.main:app --reload
 ```
 
 5. Open http://127.0.0.1:8000 in your browser.
+
+Spotify tokens are kept in memory only, so after a server restart the host
+has to log in again.
 
 ## Docker (local)
 
@@ -118,11 +124,52 @@ docker --context musically-prod compose up -d --build
 ## How to Play
 
 1. The host logs in with their Spotify Premium account.
-2. Enter a Spotify playlist URL and configure the number of rounds (or play endlessly).
+2. Pick one of the predefined playlists from `config.toml` or enter a Spotify
+   playlist URL, and configure the number of rounds (0 plays endlessly until
+   the host ends the game). For Development Mode apps, Spotify only returns
+   the contents of playlists the host owns or collaborates on, so copy other
+   playlists into your own library first.
 3. Players register their names.
-4. Start the game — a random song plays and each player takes turns typing their guess.
-5. After all players guess, the answer is revealed and scores are updated.
+4. Start the game. A random song plays and each player takes a turn guessing
+   the song title, and optionally the artist and release year. The first
+   player rotates each round. Previous guesses stay hidden until everyone has
+   had their turn.
+5. After all players guess or skip, the answer is revealed and scores are
+   updated.
 6. At the end, the final leaderboard shows the winner.
+
+## Scoring
+
+Points are configured in the `[points]` table of `config.toml`. The defaults:
+
+- Correct song title: 1 point (`song`)
+- Correct artist: 1 point (`artist`)
+- Correct release year: doubles the points of that guess (`year_multiplier`;
+  a correct year on its own is worth nothing)
+
+Guesses are fuzzy-matched, so small typos, word order, a leading "The" and
+version suffixes such as "- Remastered 2011" don't matter. The year must be
+exact.
+
+## Release years
+
+Spotify often reports the year of a remaster or compilation instead of the
+original release. After a playlist loads, Musically looks up the original
+year of every track on [MusicBrainz](https://musicbrainz.org) in the
+background. MusicBrainz allows one request per second, so large playlists take
+a while (about 5 minutes for 300 tracks). The lobby shows when the lookup is
+done. Games started earlier use Spotify's year for tracks that haven't been
+checked yet.
+
+## Development
+
+Run the test suite with:
+
+```bash
+uv run pytest
+```
+
+See `docs/architecture.md` for the design and `AGENTS.md` for conventions.
 
 ## License
 

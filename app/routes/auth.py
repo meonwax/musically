@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def is_logged_in(request: Request) -> bool:
+    # Tokens live only in memory, so a session cookie can outlive them
+    # across server restarts.
+    return (
+        bool(request.session.get("authenticated"))
+        and request.app.state.spotify.tokens is not None
+    )
+
+
 @router.get("/login")
 async def login(request: Request):
     state = secrets.token_urlsafe(16)

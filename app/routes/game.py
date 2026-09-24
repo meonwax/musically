@@ -3,46 +3,48 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.game import GamePhase
-from app.matching import check_artist, check_guess, check_year
+from app.game import GamePhase, GameState
+from app.routes.auth import is_logged_in
+from app.templating import templates
 
 logger = logging.getLogger(__name__)
 
-templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
+
+
+def _guess_area(request: Request, game: GameState) -> HTMLResponse:
+    if game.phase == GamePhase.ROUND_RESULT:
+        name = "partials/round_result.html"
+    else:
+        name = "partials/guess_form.html"
+    return templates.TemplateResponse(
+        request, name,
+        context={"game": game, "round": game.current_round},
+    )
+
+
+def _round_is_open(game: GameState) -> bool:
+    return game.current_round is not None and not game.current_round.all_guessed
+
+
+def _htmx_redirect(url: str) -> HTMLResponse:
+    # A plain redirect would make HTMX swap the whole target page into the partial.
+    return HTMLResponse("", headers={"HX-Redirect": url})
 
 
 @router.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request):
+    if not is_logged_in(request):
+        return RedirectResponse("/")
     game = request.app.state.game
     if game.phase == GamePhase.LOBBY:
         return RedirectResponse("/lobby")
     if game.phase == GamePhase.FINISHED:
         return RedirectResponse("/leaderboard")
-
-    settings = request.app.state.settings
-    spotify = request.app.state.spotify
-    token = await spotify.get_access_token_for_sdk()
-
     return templates.TemplateResponse(
         request, "game.html",
-        context={
-            "game": game,
-            "round": game.current_round,
-            "spotify_token": token,
-            "client_id": settings.spotify_client_id,
-        },
-    )
-
-
-@router.get("/game/guess-form", response_class=HTMLResponse)
-async def guess_form(request: Request):
-    game = request.app.state.game
-    return templates.TemplateResponse(
-        request, "partials/guess_form.html",
         context={"game": game, "round": game.current_round},
     )
 
@@ -55,60 +57,20 @@ async def submit_guess(
     year: str = Form(""),
 ):
     game = request.app.state.game
-    rnd = game.current_round
-    if rnd is None or rnd.all_guessed:
-        return RedirectResponse("/game", status_code=303)
-
-    player_name = rnd.current_player
-    song_ok = check_guess(guess, rnd.track.name) if guess.strip() else False
-    artist_ok = check_artist(artist, rnd.track.artists) if artist.strip() else False
+    if not _round_is_open(game):
+        return _htmx_redirect("/game")
     year_val = int(year) if year.strip().isdigit() else None
-    year_ok = check_year(year_val, rnd.track.year)
-
-    game.record_guess(
-        player_name,
-        song_guess=guess,
-        artist_guess=artist,
-        year_guess=year_val,
-        song_correct=song_ok,
-        artist_correct=artist_ok,
-        year_correct=year_ok,
-    )
-
-    if rnd.all_guessed:
-        game.finish_round()
-        return templates.TemplateResponse(
-            request, "partials/round_result.html",
-            context={"game": game, "round": rnd},
-        )
-
-    return templates.TemplateResponse(
-        request, "partials/guess_form.html",
-        context={"game": game, "round": rnd},
-    )
+    game.submit_guess(guess, artist, year_val)
+    return _guess_area(request, game)
 
 
 @router.post("/game/skip", response_class=HTMLResponse)
 async def skip_turn(request: Request):
     game = request.app.state.game
-    rnd = game.current_round
-    if rnd is None or rnd.all_guessed:
-        return RedirectResponse("/game", status_code=303)
-
-    player_name = rnd.current_player
-    game.skip_turn(player_name)
-
-    if rnd.all_guessed:
-        game.finish_round()
-        return templates.TemplateResponse(
-            request, "partials/round_result.html",
-            context={"game": game, "round": rnd},
-        )
-
-    return templates.TemplateResponse(
-        request, "partials/guess_form.html",
-        context={"game": game, "round": rnd},
-    )
+    if not _round_is_open(game):
+        return _htmx_redirect("/game")
+    game.skip_turn()
+    return _guess_area(request, game)
 
 
 @router.post("/game/next-round")
@@ -131,8 +93,9 @@ async def end_game(request: Request):
 
 @router.get("/game/token")
 async def get_token(request: Request):
-    spotify = request.app.state.spotify
-    token = await spotify.get_access_token_for_sdk()
+    if not is_logged_in(request):
+        return JSONResponse({"error": "not logged in"}, status_code=401)
+    token = await request.app.state.spotify.get_access_token()
     return {"access_token": token}
 
 
@@ -148,8 +111,6 @@ async def leaderboard(request: Request):
 @router.post("/game/play-track")
 async def play_track(request: Request, device_id: str = Form(...)):
     game = request.app.state.game
-    spotify = request.app.state.spotify
-    game.device_id = device_id
     if game.current_round:
         track = game.current_round.track
         logger.info(
@@ -158,5 +119,5 @@ async def play_track(request: Request, device_id: str = Form(...)):
             device_id,
             track.name,
         )
-        await spotify.play_track(track.uri, device_id)
+        await request.app.state.spotify.play_track(track.uri, device_id)
     return HTMLResponse("")

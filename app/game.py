@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from app.game_config import ScoringConfig
+from app.matching import check_artist, check_guess, check_year
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,6 @@ class GameState:
     current_round: RoundState | None = None
     round_number: int = 0
 
-    device_id: str | None = None
     year_enrichment_done: bool = False
 
     def add_player(self, name: str) -> Player | None:
@@ -113,18 +113,10 @@ class GameState:
         self.players = [p for p in self.players if p.name != name]
         logger.info("Player removed: %r (%d remaining)", name, len(self.players))
 
-    def set_playlist(self, tracks: list[dict]) -> None:
-        self.playlist_tracks = [
-            Track(
-                uri=t["uri"],
-                name=t["name"],
-                artists=t["artists"],
-                year=t.get("year"),
-            )
-            for t in tracks
-        ]
-        self.available_tracks = list(self.playlist_tracks)
-        random.shuffle(self.available_tracks)
+    def set_playlist(self, tracks: list[Track]) -> None:
+        self.playlist_tracks = list(tracks)
+        self.available_tracks = []
+        self.year_enrichment_done = False
         logger.info("Playlist set: %d tracks", len(self.playlist_tracks))
 
     def start_game(self) -> None:
@@ -174,80 +166,88 @@ class GameState:
         )
         return self.current_round
 
-    def record_guess(
-        self,
-        player_name: str,
-        song_guess: str,
-        artist_guess: str,
-        year_guess: int | None,
-        song_correct: bool,
-        artist_correct: bool,
-        year_correct: bool,
-    ) -> None:
-        if self.current_round is None:
-            logger.warning("Ignored guess for %r: no active round", player_name)
-            return
-        pts = compute_points(
-            song_correct, artist_correct, year_correct, self.scoring
-        )
-        self.current_round.guesses.append(
+    def submit_guess(
+        self, song: str, artist: str, year: int | None
+    ) -> RoundGuess | None:
+        """Score the current player's guess and advance to the next player."""
+        rnd = self.current_round
+        if rnd is None or rnd.current_player is None:
+            logger.warning("Ignored guess: no player on turn")
+            return None
+        song_correct = check_guess(song, rnd.track.name)
+        artist_correct = check_artist(artist, rnd.track.artists)
+        year_correct = check_year(year, rnd.track.year)
+        guess = self._record(
+            rnd,
             RoundGuess(
-                player_name=player_name,
-                song_guess=song_guess,
-                artist_guess=artist_guess,
-                year_guess=year_guess,
+                player_name=rnd.current_player,
+                song_guess=song,
+                artist_guess=artist,
+                year_guess=year,
                 song_correct=song_correct,
                 artist_correct=artist_correct,
                 year_correct=year_correct,
-                points=pts,
-            )
+                points=compute_points(
+                    song_correct, artist_correct, year_correct, self.scoring
+                ),
+            ),
         )
-        for p in self.players:
-            if p.name == player_name:
-                p.score += pts
-                if song_correct:
-                    p.correct_songs += 1
-                if artist_correct:
-                    p.correct_artists += 1
-                if year_correct:
-                    p.correct_years += 1
-                break
-        self.current_round.current_player_idx += 1
         logger.info(
             "Guess recorded: round=%d player=%r points=%d "
             "song=%s artist=%s year=%s",
             self.round_number,
-            player_name,
-            pts,
+            guess.player_name,
+            guess.points,
             song_correct,
             artist_correct,
             year_correct,
         )
+        return guess
 
-    def skip_turn(self, player_name: str) -> None:
-        logger.info("Turn skipped: round=%d player=%r", self.round_number, player_name)
-        self.record_guess(
-            player_name,
-            song_guess="(skipped)",
-            artist_guess="",
-            year_guess=None,
-            song_correct=False,
-            artist_correct=False,
-            year_correct=False,
-        )
-
-    def finish_round(self) -> None:
-        self.phase = GamePhase.ROUND_RESULT
-        if self.current_round is None:
-            logger.info("Round %d finished", self.round_number)
-            return
-        track = self.current_round.track
+    def skip_turn(self) -> RoundGuess | None:
+        rnd = self.current_round
+        if rnd is None or rnd.current_player is None:
+            logger.warning("Ignored skip: no player on turn")
+            return None
         logger.info(
-            "Round %d finished: answer=%r by %s",
-            self.round_number,
-            track.name,
-            ", ".join(track.artists),
+            "Turn skipped: round=%d player=%r", self.round_number, rnd.current_player
         )
+        return self._record(
+            rnd,
+            RoundGuess(
+                player_name=rnd.current_player,
+                song_guess="(skipped)",
+                artist_guess="",
+                year_guess=None,
+                song_correct=False,
+                artist_correct=False,
+                year_correct=False,
+                points=0,
+            ),
+        )
+
+    def _record(self, rnd: RoundState, guess: RoundGuess) -> RoundGuess:
+        rnd.guesses.append(guess)
+        for p in self.players:
+            if p.name == guess.player_name:
+                p.score += guess.points
+                if guess.song_correct:
+                    p.correct_songs += 1
+                if guess.artist_correct:
+                    p.correct_artists += 1
+                if guess.year_correct:
+                    p.correct_years += 1
+                break
+        rnd.current_player_idx += 1
+        if rnd.all_guessed:
+            self.phase = GamePhase.ROUND_RESULT
+            logger.info(
+                "Round %d finished: answer=%r by %s",
+                self.round_number,
+                rnd.track.name,
+                ", ".join(rnd.track.artists),
+            )
+        return guess
 
     def is_game_over(self) -> bool:
         if self.total_rounds == 0:
@@ -275,5 +275,4 @@ class GameState:
         self.round_number = 0
         self.total_rounds = 0
         self.phase = GamePhase.LOBBY
-        self.device_id = None
         self.year_enrichment_done = False

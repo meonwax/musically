@@ -38,16 +38,18 @@ sequenceDiagram
 
 - **OAuth 2.0 Authorization Code** flow (not PKCE, since we have a server to keep the client secret safe)
 - Scopes needed: `streaming`, `user-read-email`, `user-read-private`, `playlist-read-private`, `playlist-read-collaborative`
-- Backend stores tokens in-memory per session (cookie-based session ID)
+- Backend stores a single set of tokens in memory (one host per server process); a signed session cookie marks the host's browser as logged in
+- A request counts as logged in only if the session cookie says so **and** tokens exist, since tokens are lost on server restart while the cookie survives
 - Backend handles automatic token refresh when access token expires
+- Playlist contents come from `GET /v1/playlists/{id}/items` (the `/tracks` endpoint was removed in the February 2026 Web API changes). Spotify only returns items for playlists the host owns or collaborates on. Local files and podcast episodes are skipped.
 
 ### Playback Architecture
 
 - The **Spotify Web Playback SDK** runs in the browser as a JavaScript player instance
 - It creates a virtual "device" in the user's Spotify account
-- The **backend** tells the SDK which track URI to play via the Spotify Web API (`PUT /v1/me/player/play`)
-- The track name/artist is **never sent to the frontend** -- only the track URI reaches the JS player
-- A small `static/js/spotify-player.js` file handles: player initialization, receiving play commands, and exposing a play/pause interface
+- The **backend** tells Spotify which track to play on that device via the Web API (`PUT /v1/me/player/play`)
+- The track name/artist is **never sent to the frontend** during a round -- not even the track URI reaches the browser
+- A small `static/js/spotify-player.js` file initializes the player, fetches access tokens from `/game/token`, and reports player status (see "HTMX + Spotify JS Bridge")
 
 ## Game Flow
 
@@ -71,29 +73,47 @@ stateDiagram-v2
 
 ### Detailed Round Mechanics
 
-1. Server picks a random track from the playlist (no repeats within a game)
-2. Server tells the Spotify player to play the track URI (via HTMX-triggered JS bridge)
-3. UI shows "Player X's turn" with a text input -- **player order is shuffled each round** for fairness
-4. Player types a guess and submits (HTMX `POST /game/guess`)
-5. Server fuzzy-matches the guess against the song title (and optionally artist)
-6. Input clears, next player's turn is shown (HTMX swap of the guess form area)
+1. Server picks a random track from the playlist (no repeats until the playlist is exhausted)
+2. Server tells Spotify to play the track on the browser's player device (via the JS bridge)
+3. UI shows "Player X's turn" with inputs for song title, artist (optional) and release year (optional) -- **the first player rotates each round** (round-robin) for fairness
+4. Player submits a guess (HTMX `POST /game/guess`) or skips (`POST /game/skip`)
+5. `GameState.submit_guess` fuzzy-matches song and artist, checks the year, and awards points
+6. Next player's turn is shown (HTMX swap of the guess form area)
 7. **Previous guesses are hidden** so later players cannot cheat
-8. After all players have guessed (or skipped), server reveals the answer and shows who got it right
-9. Host clicks "Next Round" to continue (or game auto-detects if all rounds are done)
+8. After the last player has guessed (or skipped), the round moves to `ROUND_RESULT` and the server reveals the answer and shows who got what right
+9. Host clicks "Next Round" to continue, or "See Final Leaderboard" once all rounds are done
 
 ### Fuzzy Matching Rules
 
-- Compare against **song title** using `thefuzz.fuzz.token_sort_ratio`
-- Threshold: **>= 75** counts as correct (handles typos, word order, missing "The", etc.)
-- Optional: also accept a match against **artist name** for partial credit or bonus points (configurable later)
-- Normalize both strings: lowercase, strip punctuation, strip common prefixes like "The"
+Implemented in `app/matching.py`:
+
+- Both strings are normalized: Spotify version suffixes (`" - Remastered 2011"`) and bracketed parts (`"(feat. X)"`) are removed, then lowercase, punctuation stripped, leading "The" dropped
+- Titles with a leading bracket like `"(I Can't Get No) Satisfaction"` match with or without the bracketed words
+- Compare using `thefuzz.fuzz.token_sort_ratio`; **>= 75** counts as correct (handles typos and word order)
+- There is deliberately no substring matching, so a single word from a longer title (e.g. "love") does not count
+- Artist guesses match if they fit any of the track's artists
+- Years must match exactly
 
 ## Scoring
 
-- **Correct guess**: 1 point
-- All correct guessers in a round score equally (no advantage to turn order since order is shuffled)
+Point values come from the `[points]` table in `config.toml` (loaded by `app/game_config.py` into `ScoringConfig`). Defaults:
+
+- **Correct song title**: 1 point (`song`)
+- **Correct artist**: 1 point (`artist`)
+- **Correct release year**: multiplies the points of that guess (`year_multiplier`, default 2; worth nothing on its own)
+- All correct guessers in a round score equally, and the rotating start spreads any turn-order advantage
+- Per-player totals of correct songs, artists and years are shown on the final leaderboard
 - Per-game leaderboard only; resets when a new game starts
 - Displayed after each round and as a final summary
+
+## Release Year Enrichment
+
+Spotify's album release date is often a remaster or compilation year. After a playlist is loaded, `app/musicbrainz.py` runs as a background `asyncio` task and looks up each track's earliest release year on MusicBrainz, overwriting the Spotify year only when MusicBrainz reports an earlier one.
+
+- MusicBrainz allows 1 request per second, so the task sleeps between lookups
+- The lobby polls `/lobby/enrichment-status` via HTMX until the task is done
+- Loading another playlist cancels the running task before starting a new one
+- The game can start before enrichment finishes; unchecked tracks keep the Spotify year
 
 ## Project Structure
 
@@ -103,29 +123,43 @@ musically/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI app, startup, middleware
 │   ├── config.py             # Settings (Spotify client ID/secret, env vars)
+│   ├── game_config.py        # Loads playlists and scoring from config.toml
+│   ├── logging_config.py     # Log format and LOG_LEVEL
+│   ├── middleware.py         # Request logging
 │   ├── spotify.py            # Spotify Web API client (auth, playlist, playback)
 │   ├── game.py               # Game state dataclasses and logic
 │   ├── matching.py           # Fuzzy matching logic
+│   ├── musicbrainz.py        # Original release year lookup
+│   ├── templating.py         # Shared Jinja2Templates instance
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── auth.py           # /login, /callback -- Spotify OAuth
-│   │   ├── lobby.py          # /lobby -- player registration, game config
+│   │   ├── auth.py           # /login, /callback -- Spotify OAuth, is_logged_in
+│   │   ├── lobby.py          # /lobby -- player registration, playlist, game config
 │   │   └── game.py           # /game/* -- round play, guessing, leaderboard
 │   └── templates/
-│       ├── base.html          # Base layout (includes HTMX, Spotify SDK)
+│       ├── base.html          # Base layout (includes HTMX)
 │       ├── home.html          # Landing page with "Login with Spotify"
 │       ├── lobby.html         # Player names, playlist input, round config
-│       ├── game.html          # Main game view (player, song playing indicator)
+│       ├── game.html          # Main game view (loads the Spotify SDK)
 │       ├── partials/
-│       │   ├── guess_form.html    # HTMX partial: current player's guess input
-│       │   ├── round_result.html  # HTMX partial: round summary
-│       │   └── scoreboard.html    # HTMX partial: current scores
+│       │   ├── guess_form.html           # Current player's guess input
+│       │   ├── lobby_player_update.html  # Player list plus out-of-band start form and messages
+│       │   ├── messages.html             # Shared message pane; polls release year lookup
+│       │   ├── messages_oob.html         # Out-of-band swap wrapper for messages.html
+│       │   ├── player_list.html          # Registered players
+│       │   ├── round_result.html         # Round summary
+│       │   ├── scoreboard.html           # Current scores
+│       │   └── start_game_form.html      # Round count and start button
 │       └── leaderboard.html   # Final game-over leaderboard
 ├── static/
+│   ├── css/                   # app.css, lobby.css
 │   └── js/
-│       └── spotify-player.js  # Spotify Web Playback SDK init and controls
+│       └── spotify-player.js  # Spotify Web Playback SDK init
+├── tests/                     # Pytest suite, mirrors app/
 ├── docs/
 │   └── architecture.md        # This file
+├── config.toml                # Predefined playlists and scoring
+├── Dockerfile, docker-compose.yml
 ├── pyproject.toml
 ├── .env.example               # Template for SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 └── README.md
@@ -146,17 +180,18 @@ musically/
 
 Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridge is needed:
 
-- The game page template includes a `<div id="player-controls">` managed by JS
-- When HTMX swaps in a new round, the server includes a `data-track-uri` attribute on a hidden element
-- A small JS `MutationObserver` (or HTMX `htmx:afterSwap` event listener) detects the new track URI and calls `player.play(uri)` on the Spotify SDK instance
+- `game.html` contains a hidden HTMX form (`#play-track-form`, `hx-post="/game/play-track"`) with an empty `device_id` field
+- When the SDK fires `ready`, the JS writes the device ID into that field and submits the form
+- The server looks up the current round's track and starts playback on that device
+- Each round is a full page load of `/game`, so the player reconnects and playback restarts per round
 - This keeps JS minimal and lets HTMX handle all game flow navigation
 
 ## Session Management
 
-- A signed cookie stores a session ID (using `itsdangerous`)
-- Server-side dict maps session IDs to game state objects
+- A signed cookie (Starlette `SessionMiddleware`, backed by `itsdangerous`) stores the OAuth state and an `authenticated` flag
+- Game state and Spotify tokens are process-wide singletons on `app.state`
 - Single-session design: one active game per server process (party mode simplification)
-- If needed later, multiple concurrent games can be supported by keying on session ID
+- If needed later, multiple concurrent games can be supported by keying state on a session ID
 
 ## Configuration / Environment
 

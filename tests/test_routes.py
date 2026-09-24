@@ -1,21 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import GamePhase
+from app.game import GamePhase, GameState
 from app.main import app
+from app.routes.lobby import _restart_enrichment, _run_enrichment
 from app.spotify import SpotifyTokens
-from tests.conftest import SAMPLE_TRACKS
+from tests.conftest import sample_tracks
 
 
 @pytest.fixture(autouse=True)
 def reset_app_state():
     """Reset game state and inject fake tokens before each test."""
     app.state.game.reset()
+    app.state.enrichment_task = None
     app.state.spotify.tokens = SpotifyTokens(
         access_token="fake_token",
         refresh_token="fake_refresh",
@@ -62,6 +66,18 @@ class TestHomeRoute:
     def test_home_shows_login(self, client: TestClient):
         with client:
             resp = client.get("/")
+        assert "Login with Spotify" in resp.text
+
+    def test_home_links_to_lobby_when_logged_in(self, authed_client: TestClient):
+        with authed_client:
+            resp = authed_client.get("/")
+        assert "Go to Lobby" in resp.text
+        assert "Login with Spotify" not in resp.text
+
+    def test_home_shows_login_when_tokens_lost(self, authed_client: TestClient):
+        app.state.spotify.tokens = None
+        with authed_client:
+            resp = authed_client.get("/")
         assert "Login with Spotify" in resp.text
 
 
@@ -118,6 +134,67 @@ class TestLobbyRoutes:
         assert "Add at least one player to start." in resp.text
         assert '<button type="submit" disabled>Start Game</button>' in resp.text
 
+    def test_lobby_redirects_when_tokens_lost(self, authed_client: TestClient):
+        """Server restart: session cookie survives, in-memory tokens don't."""
+        app.state.spotify.tokens = None
+        with authed_client:
+            resp = authed_client.get("/lobby")
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "/"
+
+    def test_set_playlist(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_playlist_tracks",
+                new_callable=AsyncMock, return_value=sample_tracks(),
+            ),
+            patch("app.routes.lobby.enrich_tracks", new_callable=AsyncMock),
+            authed_client,
+        ):
+            resp = authed_client.post(
+                "/lobby/set-playlist", data={"playlist_url": "spotify:playlist:abc"}
+            )
+        assert resp.status_code == 200
+        assert "5 tracks" in resp.text
+        assert "Fetching original release years" in resp.text
+        assert len(app.state.game.playlist_tracks) == 5
+
+    def test_set_playlist_without_playable_tracks(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_playlist_tracks",
+                new_callable=AsyncMock, return_value=[],
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post(
+                "/lobby/set-playlist", data={"playlist_url": "spotify:playlist:abc"}
+            )
+        assert "Playlist is empty or not found" in resp.text
+        assert app.state.game.playlist_tracks == []
+
+    def test_set_playlist_api_error(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_playlist_tracks",
+                new_callable=AsyncMock, side_effect=RuntimeError("boom"),
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post(
+                "/lobby/set-playlist", data={"playlist_url": "spotify:playlist:abc"}
+            )
+        assert "boom" in resp.text
+
+    def test_enrichment_status_done(self, authed_client: TestClient):
+        game = app.state.game
+        game.set_playlist(sample_tracks())
+        game.year_enrichment_done = True
+        with authed_client:
+            resp = authed_client.get("/lobby/enrichment-status")
+        assert "5 tracks. Release years verified." in resp.text
+        assert "hx-get=\"/lobby/enrichment-status\"" not in resp.text
+
     def test_add_player(self, authed_client: TestClient):
         with authed_client:
             resp = authed_client.post(
@@ -148,7 +225,7 @@ class TestLobbyRoutes:
 
     def test_start_game_without_players(self, authed_client: TestClient):
         game = app.state.game
-        game.set_playlist(SAMPLE_TRACKS)
+        game.set_playlist(sample_tracks())
         with authed_client:
             resp = authed_client.post("/lobby/start", data={"total_rounds": "5"})
         assert resp.status_code == 303
@@ -164,7 +241,7 @@ class TestLobbyRoutes:
     def test_start_game_success(self, authed_client: TestClient):
         game = app.state.game
         game.add_player("Alice")
-        game.set_playlist(SAMPLE_TRACKS)
+        game.set_playlist(sample_tracks())
         with authed_client:
             resp = authed_client.post("/lobby/start", data={"total_rounds": "3"})
         assert resp.status_code == 303
@@ -172,12 +249,58 @@ class TestLobbyRoutes:
         assert game.phase == GamePhase.PLAYING
 
 
+class TestEnrichmentTask:
+    @staticmethod
+    def _fake_app() -> SimpleNamespace:
+        return SimpleNamespace(state=SimpleNamespace(enrichment_task=None))
+
+    async def test_run_marks_done(self):
+        game = GameState()
+        game.set_playlist(sample_tracks())
+        with patch("app.routes.lobby.enrich_tracks", new_callable=AsyncMock):
+            await _run_enrichment(game)
+        assert game.year_enrichment_done is True
+
+    async def test_run_marks_done_even_on_failure(self):
+        game = GameState()
+        with patch(
+            "app.routes.lobby.enrich_tracks",
+            new_callable=AsyncMock, side_effect=RuntimeError("boom"),
+        ):
+            await _run_enrichment(game)
+        assert game.year_enrichment_done is True
+
+    async def test_new_playlist_cancels_previous_run(self):
+        fake_app = self._fake_app()
+        game = GameState()
+        started = asyncio.Event()
+
+        async def slow_enrich(tracks):
+            started.set()
+            await asyncio.sleep(3600)
+
+        with patch("app.routes.lobby.enrich_tracks", side_effect=slow_enrich):
+            game.set_playlist(sample_tracks())
+            _restart_enrichment(fake_app, game)
+            first = fake_app.state.enrichment_task
+            await started.wait()
+
+            started.clear()
+            game.set_playlist(sample_tracks()[:2])
+            _restart_enrichment(fake_app, game)
+            await started.wait()
+
+        assert first.cancelled()
+        assert game.year_enrichment_done is False
+        fake_app.state.enrichment_task.cancel()
+
+
 class TestGameRoutes:
     def _setup_game(self):
         game = app.state.game
         game.add_player("Alice")
         game.add_player("Bob")
-        game.set_playlist(SAMPLE_TRACKS)
+        game.set_playlist(sample_tracks())
         game.total_rounds = 3
         game.start_game()
         game.start_round()
@@ -195,6 +318,30 @@ class TestGameRoutes:
             resp = authed_client.get("/game")
         assert resp.status_code == 200
         assert "Round 1" in resp.text
+
+    def test_game_page_does_not_leak_answer(self, authed_client: TestClient):
+        game = self._setup_game()
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert game.current_round.track.name not in resp.text
+
+    def test_game_redirects_home_without_login(self, client: TestClient):
+        self._setup_game()
+        with client:
+            resp = client.get("/game")
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "/"
+
+    def test_guess_after_round_complete_uses_hx_redirect(
+        self, authed_client: TestClient
+    ):
+        game = self._setup_game()
+        for _ in range(len(game.current_round.player_order)):
+            game.skip_turn()
+        with authed_client:
+            resp = authed_client.post("/game/guess", data={"guess": "x"})
+        assert resp.status_code == 200
+        assert resp.headers["HX-Redirect"] == "/game"
 
     def test_submit_guess_song_only(self, authed_client: TestClient):
         game = self._setup_game()
@@ -256,11 +403,7 @@ class TestGameRoutes:
         game = self._setup_game()
         rnd = game.current_round
         for _ in range(len(rnd.player_order)):
-            game.record_guess(
-                rnd.current_player, "x", "", None,
-                song_correct=False, artist_correct=False, year_correct=False,
-            )
-        game.finish_round()
+            game.skip_turn()
         with authed_client:
             resp = authed_client.post("/game/next-round")
         assert resp.status_code == 303
@@ -282,6 +425,23 @@ class TestGameRoutes:
         data = resp.json()
         assert "access_token" in data
         assert data["access_token"] == "fake_token"
+
+    def test_get_token_requires_login(self, client: TestClient):
+        with client:
+            resp = client.get("/game/token")
+        assert resp.status_code == 401
+
+    def test_play_track(self, authed_client: TestClient):
+        game = self._setup_game()
+        with (
+            patch.object(
+                app.state.spotify, "play_track", new_callable=AsyncMock
+            ) as mock_play,
+            authed_client,
+        ):
+            resp = authed_client.post("/game/play-track", data={"device_id": "dev1"})
+        assert resp.status_code == 200
+        mock_play.assert_awaited_once_with(game.current_round.track.uri, "dev1")
 
 
 class TestLeaderboardRoute:

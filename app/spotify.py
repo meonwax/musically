@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from app.config import Settings
+from app.game import Track
 
 
 @dataclass
@@ -81,7 +82,7 @@ class SpotifyClient:
             expires_at=time.time() + data["expires_in"],
         )
 
-    async def _ensure_token(self) -> str:
+    async def get_access_token(self) -> str:
         if self.tokens is None:
             raise RuntimeError("Not authenticated with Spotify")
         if self.tokens.expired:
@@ -89,7 +90,7 @@ class SpotifyClient:
         return self.tokens.access_token
 
     async def _api_get(self, path: str, params: dict | None = None) -> dict:
-        token = await self._ensure_token()
+        token = await self.get_access_token()
         resp = await self._http.get(
             f"{self.settings.spotify_api_base}{path}",
             headers={"Authorization": f"Bearer {token}"},
@@ -101,7 +102,7 @@ class SpotifyClient:
     async def _api_put(
         self, path: str, json_body: dict | None = None
     ) -> httpx.Response:
-        token = await self._ensure_token()
+        token = await self.get_access_token()
         resp = await self._http.put(
             f"{self.settings.spotify_api_base}{path}",
             headers={"Authorization": f"Bearer {token}"},
@@ -121,28 +122,29 @@ class SpotifyClient:
         # Assume bare ID
         return url_or_id.strip()
 
-    async def get_playlist_tracks(self, playlist_id: str) -> list[dict]:
-        tracks: list[dict] = []
-        path = f"/playlists/{playlist_id}/tracks"
-        params: dict = {
+    async def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
+        tracks: list[Track] = []
+        path: str | None = f"/playlists/{playlist_id}/items"
+        params: dict | None = {
             "limit": 100,
-            "fields": "items(track(uri,name,artists(name),album(release_date))),next",
+            "fields": "items(item(uri,name,artists(name),album(release_date))),next",
         }
         while path:
             data = await self._api_get(path, params)
-            for item in data.get("items", []):
-                t = item.get("track")
-                if t and t.get("uri"):
-                    release_date = (t.get("album") or {}).get("release_date", "")
-                    year = int(release_date[:4]) if len(release_date) >= 4 else None
-                    tracks.append(
-                        {
-                            "uri": t["uri"],
-                            "name": t["name"],
-                            "artists": [a["name"] for a in t.get("artists", [])],
-                            "year": year,
-                        }
+            for entry in data.get("items", []):
+                t = entry.get("item")
+                # Local files and podcast episodes can't be played as tracks.
+                if not t or not t.get("uri", "").startswith("spotify:track:"):
+                    continue
+                release_date = (t.get("album") or {}).get("release_date", "")
+                tracks.append(
+                    Track(
+                        uri=t["uri"],
+                        name=t["name"],
+                        artists=[a["name"] for a in t.get("artists", [])],
+                        year=int(release_date[:4]) if len(release_date) >= 4 else None,
                     )
+                )
             next_url = data.get("next")
             if next_url:
                 path = next_url.replace(self.settings.spotify_api_base, "")
@@ -158,14 +160,3 @@ class SpotifyClient:
             f"/me/player/play?device_id={device_id}",
             json_body={"uris": [track_uri]},
         )
-
-    async def pause_playback(self, device_id: str) -> None:
-        token = await self._ensure_token()
-        await self._http.put(
-            f"{self.settings.spotify_api_base}/me/player/pause?device_id={device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-    async def get_access_token_for_sdk(self) -> str:
-        """Return a fresh access token for the Web Playback SDK."""
-        return await self._ensure_token()
