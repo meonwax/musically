@@ -17,7 +17,7 @@ See `docs/architecture.md` for the full architecture and design plan.
 
 - Use `uv add <package>` to add dependencies.
 - Run the dev server with `uv run uvicorn app.main:app --reload`.
-- Keep JavaScript to the absolute minimum required for Spotify Web Playback SDK integration. All UI interactions should go through HTMX and server-side templates.
+- Keep JavaScript to the absolute minimum required for playback control (Web Playback SDK and Spotify Connect). All UI interactions should go through HTMX and server-side templates.
 - HTMX partials live in `app/templates/partials/` and are returned by routes for partial page updates.
 - Full-page templates extend `base.html`.
 - Game state lives in `app/game.py` as dataclasses. There is no database.

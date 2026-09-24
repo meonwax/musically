@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.game import Track
-from app.spotify import SpotifyClient, SpotifyTokens
+import httpx
+
+from app.game import PlaybackDevice, Track
+from app.spotify import PlaybackState, SpotifyClient, SpotifyTokens
 
 
 class TestExtractPlaylistId:
@@ -72,6 +74,8 @@ class TestAuthorizeUrl:
         url = spotify_client.get_authorize_url("state")
         assert "scope=" in url
         assert "streaming" in url
+        assert "user-read-playback-state" in url
+        assert "user-modify-playback-state" in url
 
     def test_starts_with_spotify_auth_url(self, spotify_client: SpotifyClient):
         url = spotify_client.get_authorize_url("state")
@@ -156,3 +160,95 @@ class TestGetPlaylistTracks:
             tracks = await authenticated_spotify.get_playlist_tracks("abc")
         assert [t.uri for t in tracks] == ["spotify:track:1", "spotify:track:2"]
         assert mock_get.call_args_list[1].args == ("/playlists/abc/items?offset=100", None)
+
+
+def _device(**overrides) -> dict:
+    device = {
+        "id": "dev1",
+        "name": "Kitchen",
+        "type": "Speaker",
+        "is_restricted": False,
+    }
+    return {**device, **overrides}
+
+
+class TestGetDevices:
+    async def test_parses_devices(self, authenticated_spotify: SpotifyClient):
+        with patch.object(
+            authenticated_spotify, "_api_get", new_callable=AsyncMock,
+            return_value={"devices": [_device(), _device(id="dev2", name="Pixel",
+                                                         type="Smartphone")]},
+        ) as mock_get:
+            devices = await authenticated_spotify.get_devices()
+        assert mock_get.call_args.args[0] == "/me/player/devices"
+        assert devices == [
+            PlaybackDevice(id="dev1", name="Kitchen", type="Speaker"),
+            PlaybackDevice(id="dev2", name="Pixel", type="Smartphone"),
+        ]
+
+    async def test_skips_uncontrollable_and_own_web_player(
+        self, authenticated_spotify: SpotifyClient
+    ):
+        devices = [
+            _device(id="restricted", is_restricted=True),
+            _device(id=None),
+            _device(id="web", name="Musically Game"),
+            _device(id="ok"),
+        ]
+        with patch.object(
+            authenticated_spotify, "_api_get", new_callable=AsyncMock,
+            return_value={"devices": devices},
+        ):
+            result = await authenticated_spotify.get_devices()
+        assert [d.id for d in result] == ["ok"]
+
+
+def _response(status: int, json_body: dict | None = None) -> httpx.Response:
+    return httpx.Response(
+        status,
+        json=json_body,
+        request=httpx.Request("GET", "https://api.spotify.com/v1/me/player"),
+    )
+
+
+class TestGetPlaybackState:
+    async def test_nothing_playing(self, authenticated_spotify: SpotifyClient):
+        with patch.object(
+            authenticated_spotify, "_request", new_callable=AsyncMock,
+            return_value=_response(204),
+        ):
+            assert await authenticated_spotify.get_playback_state() is None
+
+    async def test_parses_state(self, authenticated_spotify: SpotifyClient):
+        body = {
+            "device": _device(),
+            "is_playing": True,
+            "progress_ms": 42_000,
+        }
+        with patch.object(
+            authenticated_spotify, "_request", new_callable=AsyncMock,
+            return_value=_response(200, body),
+        ):
+            state = await authenticated_spotify.get_playback_state()
+        assert state == PlaybackState(device_id="dev1", paused=False, position=42_000)
+
+
+class TestPlaybackCommands:
+    async def test_play_track(self, authenticated_spotify: SpotifyClient):
+        with patch.object(authenticated_spotify, "_api_put", new_callable=AsyncMock) as mock_put:
+            await authenticated_spotify.play_track("spotify:track:1", "dev1")
+        mock_put.assert_awaited_once_with(
+            "/me/player/play",
+            json_body={"uris": ["spotify:track:1"]},
+            params={"device_id": "dev1"},
+        )
+
+    async def test_pause(self, authenticated_spotify: SpotifyClient):
+        with patch.object(authenticated_spotify, "_api_put", new_callable=AsyncMock) as mock_put:
+            await authenticated_spotify.pause("dev1")
+        mock_put.assert_awaited_once_with("/me/player/pause", params={"device_id": "dev1"})
+
+    async def test_resume(self, authenticated_spotify: SpotifyClient):
+        with patch.object(authenticated_spotify, "_api_put", new_callable=AsyncMock) as mock_put:
+            await authenticated_spotify.resume("dev1")
+        mock_put.assert_awaited_once_with("/me/player/play", params={"device_id": "dev1"})

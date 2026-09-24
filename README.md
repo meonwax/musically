@@ -160,18 +160,21 @@ docker --context musically-prod compose up -d --build
    the contents of playlists the host owns or collaborates on, so copy other
    playlists into your own library first.
 3. Players register their names.
-4. Start the game. A random song plays and each player takes a turn guessing
+4. Choose where the music plays: in this browser, or on any Spotify Connect
+   device such as the Spotify app on a phone, a laptop or a speaker. Open
+   Spotify on the device first, then refresh the list.
+5. Start the game. A random song plays and each player takes a turn guessing
    the song title, and optionally the artist and release year. The first
    player rotates each round. Previous guesses stay hidden until everyone has
    had their turn.
-5. After all players guess or skip, the answer is revealed and scores are
+6. After all players guess or skip, the answer is revealed and scores are
    updated.
-6. At the end, the final leaderboard shows the winner.
+7. At the end, the final leaderboard shows the winner.
 
-On phones, browsers block audio that doesn't start from a tap. If the first
-song stays paused, tap "Tap to start the music". Browsers that block autoplay
-strictly, such as Brave, may still refuse. In that case, allow autoplay for
-the site in the browser's site settings and reload.
+Phone browsers usually block the in-browser player because the songs don't
+start from a tap. On phones, pick the Spotify app as the device instead. Songs
+fade out and in only in the browser player. A Spotify Connect device pauses and
+resumes right away.
 
 ## Scoring
 

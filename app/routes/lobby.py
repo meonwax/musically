@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.game import GamePhase, GameState
+from app.game import GamePhase, GameState, PlaybackDevice
 from app.musicbrainz import enrich_tracks
 from app.routes.auth import is_logged_in
 from app.templating import templates
@@ -168,6 +168,65 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
             "partials/messages.html",
             context=_lobby_message_context(game, error=str(e)),
         )
+
+
+async def _device_picker(
+    request: Request,
+    *,
+    devices: list[PlaybackDevice] | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    if devices is None:
+        try:
+            devices = await request.app.state.spotify.get_devices()
+        except Exception:
+            logger.exception("Failed to list Spotify devices")
+            devices = []
+            error = error or (
+                "Could not load your Spotify devices. "
+                "Log in again if this keeps happening."
+            )
+    return templates.TemplateResponse(
+        request,
+        "partials/device_picker.html",
+        context={
+            "devices": devices,
+            "selected": request.app.state.game.playback_device,
+            "error": error,
+        },
+    )
+
+
+@router.get("/lobby/devices", response_class=HTMLResponse)
+async def list_devices(request: Request):
+    return await _device_picker(request)
+
+
+@router.post("/lobby/set-device", response_class=HTMLResponse)
+async def set_device(request: Request, device_id: str = Form("")):
+    game = request.app.state.game
+    if not device_id:
+        game.playback_device = None
+        logger.info("Playback device: browser")
+        return await _device_picker(request)
+    try:
+        devices = await request.app.state.spotify.get_devices()
+    except Exception:
+        logger.exception("Failed to list Spotify devices")
+        return await _device_picker(
+            request, devices=[], error="Could not load your Spotify devices."
+        )
+    device = next((d for d in devices if d.id == device_id), None)
+    if device is None:
+        return await _device_picker(
+            request,
+            devices=devices,
+            error="That device is no longer available. Open Spotify on it "
+            "and refresh the list.",
+        )
+    game.playback_device = device
+    logger.info("Playback device: %r (%s)", device.name, device.type)
+    return await _device_picker(request, devices=devices)
 
 
 @router.get("/lobby/enrichment-status", response_class=HTMLResponse)

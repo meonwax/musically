@@ -8,7 +8,17 @@ from dataclasses import dataclass, field
 import httpx
 
 from app.config import Settings
-from app.game import Track
+from app.game import PlaybackDevice, Track
+
+# The Web Playback SDK registers the browser under this Connect device name.
+WEB_PLAYER_NAME = "Musically Game"
+
+
+@dataclass(frozen=True)
+class PlaybackState:
+    device_id: str | None
+    paused: bool
+    position: int
 
 
 @dataclass
@@ -89,27 +99,35 @@ class SpotifyClient:
             await self.refresh_access_token()
         return self.tokens.access_token
 
-    async def _api_get(self, path: str, params: dict | None = None) -> dict:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        json_body: dict | None = None,
+    ) -> httpx.Response:
         token = await self.get_access_token()
-        resp = await self._http.get(
+        resp = await self._http.request(
+            method,
             f"{self.settings.spotify_api_base}{path}",
             headers={"Authorization": f"Bearer {token}"},
             params=params,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    async def _api_put(
-        self, path: str, json_body: dict | None = None
-    ) -> httpx.Response:
-        token = await self.get_access_token()
-        resp = await self._http.put(
-            f"{self.settings.spotify_api_base}{path}",
-            headers={"Authorization": f"Bearer {token}"},
             json=json_body,
         )
         resp.raise_for_status()
         return resp
+
+    async def _api_get(self, path: str, params: dict | None = None) -> dict:
+        return (await self._request("GET", path, params=params)).json()
+
+    async def _api_put(
+        self,
+        path: str,
+        json_body: dict | None = None,
+        params: dict | None = None,
+    ) -> httpx.Response:
+        return await self._request("PUT", path, params=params, json_body=json_body)
 
     # ── Playlist ────────────────────────────────────────────────
 
@@ -157,6 +175,40 @@ class SpotifyClient:
 
     async def play_track(self, track_uri: str, device_id: str) -> None:
         await self._api_put(
-            f"/me/player/play?device_id={device_id}",
+            "/me/player/play",
             json_body={"uris": [track_uri]},
+            params={"device_id": device_id},
         )
+
+    async def get_devices(self) -> list[PlaybackDevice]:
+        """Spotify Connect devices the game can control, without its own web player."""
+        data = await self._api_get("/me/player/devices")
+        return [
+            PlaybackDevice(
+                id=d["id"],
+                name=d.get("name", ""),
+                type=d.get("type", ""),
+            )
+            for d in data.get("devices", [])
+            if d.get("id")
+            and not d.get("is_restricted")
+            and d.get("name") != WEB_PLAYER_NAME
+        ]
+
+    async def get_playback_state(self) -> PlaybackState | None:
+        resp = await self._request("GET", "/me/player")
+        if resp.status_code == 204 or not resp.content:
+            return None
+        data = resp.json()
+        device = data.get("device") or {}
+        return PlaybackState(
+            device_id=device.get("id"),
+            paused=not data.get("is_playing", False),
+            position=data.get("progress_ms") or 0,
+        )
+
+    async def pause(self, device_id: str) -> None:
+        await self._api_put("/me/player/pause", params={"device_id": device_id})
+
+    async def resume(self, device_id: str) -> None:
+            await self._api_put("/me/player/play", params={"device_id": device_id})

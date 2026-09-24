@@ -3,26 +3,35 @@
 {% block title_suffix %} - Round {{ game.round_number }}{% endblock %}
 
 {% block head %}
-<script src="/static/js/spotify-player.js?v={{ project.version }}"></script>
+{% set device = game.playback_device %}
+{% if device %}
+<script src="/static/js/spotify-player.js?v={{ project.version }}"
+        data-mode="connect"
+        data-device-name="{{ device.name }}"></script>
+{% else %}
+<script src="/static/js/spotify-player.js?v={{ project.version }}"
+        data-mode="browser"
+        data-player-name="{{ web_player_name }}"></script>
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
+{% set device = game.playback_device %}
 <div id="game-messages" class="message-pane" aria-live="polite">
     <p id="player-status" class="message message--status">
-        <span id="player-status-text">Connecting to Spotify...</span>
+        <span id="player-status-text">{% if device %}Starting playback on {{ device.name }}...{% else %}Connecting to Spotify...{% endif %}</span>
         <span id="player-controls" class="player-controls hidden">
             <button type="button" id="play-toggle" aria-label="Pause" title="Pause">&#x23F8;&#xFE0E;</button>
             <span id="elapsed" class="elapsed" role="timer">0:00</span>
         </span>
-        <button type="button" id="start-music" class="hidden">Tap to start the music</button>
     </p>
 </div>
 
 <!-- Submitted by the JS once the player is ready. Later rounds are swapped
      in without a reload and trigger playback themselves, reusing this device. -->
 <form id="play-track-form" class="hidden" hx-post="/game/play-track" hx-swap="none">
-    <input type="hidden" name="device_id" id="device-id" value="">
+    <input type="hidden" name="device_id" id="device-id" value="{{ device.id if device else '' }}">
 </form>
 
 <div id="round">

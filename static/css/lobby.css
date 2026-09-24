@@ -28,3 +28,8 @@ fieldset {
 fieldset:disabled {
     opacity: 0.6;
 }
+
+.hint {
+    font-size: 0.9em;
+    color: #666;
+}

@@ -9,18 +9,22 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import GamePhase, GameState
+from app.game import GamePhase, GameState, PlaybackDevice
 from app.main import app
 from app.routes.lobby import _restart_enrichment, _run_enrichment
-from app.spotify import SpotifyTokens
+from app.spotify import PlaybackState, SpotifyTokens
 from app.project import load_project_info
 from tests.conftest import sample_tracks
+
+KITCHEN = PlaybackDevice(id="kitchen-id", name="Kitchen", type="Speaker")
+PHONE = PlaybackDevice(id="phone-id", name="Pixel", type="Smartphone")
 
 
 @pytest.fixture(autouse=True)
 def reset_app_state():
     """Reset game state and inject fake tokens before each test."""
     app.state.game.reset()
+    app.state.game.playback_device = None
     app.state.enrichment_task = None
     app.state.spotify.tokens = SpotifyTokens(
         access_token="fake_token",
@@ -340,11 +344,26 @@ class TestGameRoutes:
         assert 'id="elapsed" class="elapsed" role="timer"' in resp.text
         assert "vinyl" not in resp.text
 
-    def test_game_page_has_hidden_start_music_fallback(self, authed_client: TestClient):
+    def test_browser_mode_loads_web_player(self, authed_client: TestClient):
         self._setup_game()
         with authed_client:
             resp = authed_client.get("/game")
-        assert '<button type="button" id="start-music" class="hidden">' in resp.text
+        assert 'data-mode="browser"' in resp.text
+        assert 'data-player-name="Musically Game"' in resp.text
+        assert "https://sdk.scdn.co/spotify-player.js" in resp.text
+        assert 'id="device-id" value=""' in resp.text
+        assert "start-music" not in resp.text
+
+    def test_connect_mode_skips_web_player(self, authed_client: TestClient):
+        self._setup_game()
+        app.state.game.playback_device = KITCHEN
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert 'data-mode="connect"' in resp.text
+        assert 'data-device-name="Kitchen"' in resp.text
+        assert "sdk.scdn.co" not in resp.text
+        assert 'id="device-id" value="kitchen-id"' in resp.text
+        assert "Starting playback on Kitchen..." in resp.text
 
     def test_static_urls_carry_version(self, authed_client: TestClient):
         self._setup_game()
@@ -561,6 +580,173 @@ class TestGameRoutes:
             resp = authed_client.post("/game/play-track", data={"device_id": ""})
         assert resp.status_code == 200
         mock_play.assert_not_awaited()
+
+    def test_play_track_failure_returns_502(self, authed_client: TestClient):
+        self._setup_game()
+        with (
+            patch.object(
+                app.state.spotify, "play_track", new_callable=AsyncMock,
+                side_effect=RuntimeError("Device not found"),
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post("/game/play-track", data={"device_id": "gone"})
+        assert resp.status_code == 502
+
+
+class TestDeviceRoutes:
+    def test_lobby_loads_device_picker(self, authed_client: TestClient):
+        with authed_client:
+            resp = authed_client.get("/lobby")
+        assert 'hx-get="/lobby/devices" hx-trigger="load"' in resp.text
+
+    def test_lists_browser_and_devices(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                return_value=[KITCHEN, PHONE],
+            ),
+            authed_client,
+        ):
+            resp = authed_client.get("/lobby/devices")
+        assert '<option value="" selected>This browser (web player)</option>' in resp.text
+        assert '<option value="kitchen-id">Kitchen (Speaker)</option>' in resp.text
+        assert '<option value="phone-id">Pixel (Smartphone)</option>' in resp.text
+
+    def test_listing_failure_shows_error(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                side_effect=RuntimeError("403"),
+            ),
+            authed_client,
+        ):
+            resp = authed_client.get("/lobby/devices")
+        assert resp.status_code == 200
+        assert "Could not load your Spotify devices" in resp.text
+        assert "This browser (web player)" in resp.text
+
+    def test_select_device(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                return_value=[KITCHEN, PHONE],
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post("/lobby/set-device", data={"device_id": "phone-id"})
+        assert app.state.game.playback_device == PHONE
+        assert '<option value="phone-id" selected>' in resp.text
+
+    def test_select_browser(self, authed_client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                return_value=[KITCHEN],
+            ),
+            authed_client,
+        ):
+            authed_client.post("/lobby/set-device", data={"device_id": ""})
+        assert app.state.game.playback_device is None
+
+    def test_select_unknown_device(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                return_value=[KITCHEN],
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post("/lobby/set-device", data={"device_id": "gone"})
+        assert app.state.game.playback_device is None
+        assert "no longer available" in resp.text
+
+    def test_selected_device_missing_from_list(self, authed_client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        with (
+            patch.object(
+                app.state.spotify, "get_devices", new_callable=AsyncMock,
+                return_value=[PHONE],
+            ),
+            authed_client,
+        ):
+            resp = authed_client.get("/lobby/devices")
+        assert '<option value="kitchen-id" selected>Kitchen (not found)</option>' in resp.text
+
+    def test_device_survives_lobby_reset(self, authed_client: TestClient):
+        game = app.state.game
+        game.playback_device = KITCHEN
+        game.add_player("Alice")
+        game.set_playlist(sample_tracks())
+        game.start_game()
+        with authed_client:
+            authed_client.get("/lobby")
+        assert game.players == []
+        assert game.playback_device == KITCHEN
+
+
+class TestPlaybackControlRoutes:
+    def test_requires_login(self, client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        with client:
+            assert client.get("/game/playback").status_code == 401
+            assert client.post("/game/pause").status_code == 401
+
+    def test_requires_connect_device(self, authed_client: TestClient):
+        with authed_client:
+            assert authed_client.get("/game/playback").status_code == 409
+            assert authed_client.post("/game/resume").status_code == 409
+
+    def test_playback_state(self, authed_client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        state = PlaybackState(device_id="kitchen-id", paused=False, position=12_000)
+        with (
+            patch.object(
+                app.state.spotify, "get_playback_state", new_callable=AsyncMock,
+                return_value=state,
+            ),
+            authed_client,
+        ):
+            resp = authed_client.get("/game/playback")
+        assert resp.json() == {"paused": False, "position": 12_000}
+
+    def test_playback_on_other_device_is_null(self, authed_client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        state = PlaybackState(device_id="phone-id", paused=False, position=0)
+        with (
+            patch.object(
+                app.state.spotify, "get_playback_state", new_callable=AsyncMock,
+                return_value=state,
+            ),
+            authed_client,
+        ):
+            resp = authed_client.get("/game/playback")
+        assert resp.status_code == 200
+        assert resp.json() is None
+
+    @pytest.mark.parametrize(("path", "method"), [("/game/pause", "pause"), ("/game/resume", "resume")])
+    def test_pause_and_resume(self, authed_client: TestClient, path: str, method: str):
+        app.state.game.playback_device = KITCHEN
+        with (
+            patch.object(app.state.spotify, method, new_callable=AsyncMock) as mock_cmd,
+            authed_client,
+        ):
+            resp = authed_client.post(path)
+        assert resp.status_code == 204
+        mock_cmd.assert_awaited_once_with("kitchen-id")
+
+    def test_command_failure_returns_502(self, authed_client: TestClient):
+        app.state.game.playback_device = KITCHEN
+        with (
+            patch.object(
+                app.state.spotify, "pause", new_callable=AsyncMock,
+                side_effect=RuntimeError("Device not found"),
+            ),
+            authed_client,
+        ):
+            resp = authed_client.post("/game/pause")
+        assert resp.status_code == 502
 
 
 class TestLeaderboardRoute:

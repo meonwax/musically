@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.game import (
     GamePhase,
     GameState,
+    PlaybackDevice,
     Player,
     RoundState,
     Track,
@@ -128,6 +129,12 @@ class TestGameStatePlaylist:
     def test_start_game_fills_available_tracks(self, game_ready: GameState):
         game_ready.start_game()
         assert len(game_ready.available_tracks) == 5
+
+    def test_reset_keeps_playback_device(self, game_ready: GameState):
+        device = PlaybackDevice(id="d", name="Kitchen", type="Speaker")
+        game_ready.playback_device = device
+        game_ready.reset()
+        assert game_ready.playback_device == device
 
 
 def _verify_next(tracks) -> Track:

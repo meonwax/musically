@@ -41,6 +41,15 @@ class Track:
         return display_title(self.name)
 
 
+@dataclass(frozen=True)
+class PlaybackDevice:
+    """A Spotify Connect device the game plays on instead of the browser."""
+
+    id: str
+    name: str
+    type: str
+
+
 @dataclass
 class RoundGuess:
     player_name: str
@@ -102,6 +111,10 @@ class GameState:
     round_number: int = 0
 
     year_enrichment_done: bool = False
+
+    # None plays in the browser via the Web Playback SDK. Kept across resets,
+    # since it is the host's setup rather than part of a game.
+    playback_device: PlaybackDevice | None = None
 
     def add_player(self, name: str) -> Player | None:
         if any(p.name == name for p in self.players):

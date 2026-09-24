@@ -37,7 +37,7 @@ sequenceDiagram
 ```
 
 - **OAuth 2.0 Authorization Code** flow (not PKCE, since we have a server to keep the client secret safe)
-- Scopes needed: `streaming`, `user-read-email`, `user-read-private`, `playlist-read-private`, `playlist-read-collaborative`
+- Scopes needed: `streaming`, `user-read-playback-state`, `user-modify-playback-state`, `user-read-email`, `user-read-private`, `playlist-read-private`, `playlist-read-collaborative`
 - Backend stores a single set of tokens in memory (one host per server process); a signed session cookie marks the host's browser as logged in
 - A request counts as logged in only if the session cookie says so **and** tokens exist, since tokens are lost on server restart while the cookie survives
 - Backend handles automatic token refresh when access token expires
@@ -45,11 +45,12 @@ sequenceDiagram
 
 ### Playback Architecture
 
-- The **Spotify Web Playback SDK** runs in the browser as a JavaScript player instance
-- It creates a virtual "device" in the user's Spotify account
-- The **backend** tells Spotify which track to play on that device via the Web API (`PUT /v1/me/player/play`)
+- The lobby lets the host pick the playback device (`GameState.playback_device`, kept across resets):
+  - **This browser** (default): the **Spotify Web Playback SDK** runs in the page and creates a virtual device in the user's Spotify account
+  - **A Spotify Connect device** from `GET /v1/me/player/devices` (Spotify app on a phone, laptop, speaker). Restricted devices and the game's own web player are left out. Phone browsers usually block the SDK's audio, so this is the way to play on phones
+- Either way, the **backend** tells Spotify which track to play on the device via the Web API (`PUT /v1/me/player/play`)
 - The track name/artist is **never sent to the frontend** during a round -- not even the track URI reaches the browser
-- A small `static/js/spotify-player.js` file initializes the player, fetches access tokens from `/game/token`, and reports player status (see "HTMX + Spotify JS Bridge")
+- A small `static/js/spotify-player.js` file drives the status line, play/pause, elapsed time for both modes and the fades of the browser player (see "HTMX + Spotify JS Bridge")
 
 ## Game Flow
 
@@ -74,7 +75,7 @@ stateDiagram-v2
 ### Detailed Round Mechanics
 
 1. Server picks a random track from the playlist (no repeats until the playlist is exhausted)
-2. Server tells Spotify to play the track on the browser's player device (via the JS bridge)
+2. Server tells Spotify to play the track on the chosen device: the browser's player or a Spotify Connect device (via the JS bridge)
 3. UI shows "Player X's turn" with inputs for song title, artist (optional) and release year (optional) -- **the first player rotates each round** (round-robin) for fairness
 4. Player submits a guess (HTMX `POST /game/guess`) or skips (`POST /game/skip`)
 5. `GameState.submit_guess` fuzzy-matches song and artist, checks the year, and awards points
@@ -145,6 +146,7 @@ musically/
 │       ├── lobby.html         # Player names, playlist input, round config
 │       ├── game.html          # Main game view (loads the Spotify SDK)
 │       ├── partials/
+│       │   ├── device_picker.html        # Playback device selection in the lobby
 │       │   ├── guess_form.html           # Current player's guess input
 │       │   ├── lobby_player_update.html  # Player list plus out-of-band start form and messages
 │       │   ├── messages.html             # Shared message pane; polls release year lookup
@@ -158,7 +160,7 @@ musically/
 ├── static/
 │   ├── css/                   # app.css, lobby.css
 │   └── js/
-│       └── spotify-player.js  # Spotify Web Playback SDK init
+│       └── spotify-player.js  # Playback controls for the SDK and Spotify Connect
 ├── tests/                     # Pytest suite, mirrors app/
 ├── docs/
 │   └── architecture.md        # This file
@@ -192,9 +194,11 @@ Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridg
 - The swapped-in partial contains an element with `hx-trigger="load"` that posts to `/game/play-track` with `hx-include="#device-id"`, starting the new track without any extra JS. If the player isn't ready yet the device ID is empty, the request is a no-op, and the `ready` handler starts playback instead
 - The partial also carries a top-level `<title>`, which htmx uses to update the document title
 - `/game/next-round` only advances from `ROUND_RESULT`; a repeated click returns 204 so the page stays put
-- Forms that stop the song ("Next Round", "End Game", "See Final Leaderboard") carry `data-fade-out`. A capture-phase `submit` listener in the JS holds the submission, fades the SDK volume to zero over 1.5 s, pauses, restores the volume, and then resubmits the form. Because it runs before htmx's own handler, the next track is only requested after the fade
-- Mobile browsers block audio that doesn't start from a user gesture, and songs are started by the server. The first tap or form submit on the game page calls the SDK's `activateElement()` so later songs can play. If the SDK still reports `autoplay_failed`, a "Tap to start the music" button appears and restarts the song via `/game/play-track`. `activateElement()` only unlocks the SDK's media element before a song is loaded, so browsers that block autoplay strictly (e.g. Brave with autoplay blocked) can keep refusing. If the retry fails or doesn't play within 5 s, the status line asks the user to allow autoplay for the site
-- The play/pause button in the status line fades out before pausing and fades back in to full volume on resume. All fades run one after another, and the button is disabled while any of them is in progress
+- Forms that stop the song ("Next Round", "End Game", "See Final Leaderboard") carry `data-fade-out`. A capture-phase `submit` listener in the JS holds the submission, pauses the song, and then resubmits the form. Because it runs before htmx's own handler, the next track is only requested once the song is paused, and a Connect device doesn't keep playing after the game
+- In browser mode, pausing fades the SDK volume to zero over 1.5 s and restores it afterwards, and resuming fades back in. This applies to the play/pause button and the forms above. Commands run one after another, and the button is disabled while any of them is in progress
+- The script gets its mode from `data-*` attributes on its own `<script>` tag. In browser mode the SDK is loaded and its events drive the UI. If the SDK reports `autoplay_failed`, the status line suggests picking a Spotify device in the lobby
+- In Connect mode the SDK isn't loaded. `#device-id` is prefilled with the chosen device, playback starts once the DOM is ready, and the controls go through `GET /game/playback`, `POST /game/pause` and `/game/resume`. The state is polled every 5 s for the elapsed time
+- Connect mode doesn't fade: every volume step would be a Web API call, and the device's own volume stays untouched. Spotify doesn't guarantee the order of player commands, so a pause waits briefly before the next track is started
 - Reloading `/game` still works: the player reconnects and the current song restarts
 - This keeps JS minimal and lets HTMX handle all game flow navigation
 

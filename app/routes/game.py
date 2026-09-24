@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from app.game import GamePhase, GameState
 from app.routes.auth import is_logged_in
+from app.spotify import WEB_PLAYER_NAME
 from app.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,11 @@ async def game_page(request: Request):
         return RedirectResponse("/leaderboard")
     return templates.TemplateResponse(
         request, "game.html",
-        context={"game": game, "round": game.current_round},
+        context={
+            "game": game,
+            "round": game.current_round,
+            "web_player_name": WEB_PLAYER_NAME,
+        },
     )
 
 
@@ -127,5 +133,52 @@ async def play_track(request: Request, device_id: str = Form("")):
             device_id,
             track.name,
         )
-        await request.app.state.spotify.play_track(track.uri, device_id)
+        try:
+            await request.app.state.spotify.play_track(track.uri, device_id)
+        except Exception:
+            logger.exception("Starting playback failed on device %s", device_id)
+            return HTMLResponse("", status_code=502)
     return HTMLResponse("")
+
+
+async def _control_device(
+    request: Request, command: Callable[[str], Awaitable[None]]
+) -> Response:
+    if not is_logged_in(request):
+        return JSONResponse({"error": "not logged in"}, status_code=401)
+    device = request.app.state.game.playback_device
+    if device is None:
+        return JSONResponse({"error": "no Spotify device selected"}, status_code=409)
+    try:
+        await command(device.id)
+    except Exception:
+        logger.exception("Spotify command failed on %r", device.name)
+        return JSONResponse({"error": "Spotify rejected the command"}, status_code=502)
+    return Response(status_code=204)
+
+
+@router.get("/game/playback")
+async def playback_state(request: Request):
+    if not is_logged_in(request):
+        return JSONResponse({"error": "not logged in"}, status_code=401)
+    device = request.app.state.game.playback_device
+    if device is None:
+        return JSONResponse({"error": "no Spotify device selected"}, status_code=409)
+    try:
+        state = await request.app.state.spotify.get_playback_state()
+    except Exception:
+        logger.exception("Reading the playback state failed")
+        return JSONResponse({"error": "Spotify request failed"}, status_code=502)
+    if state is None or state.device_id != device.id:
+        return JSONResponse(None)
+    return {"paused": state.paused, "position": state.position}
+
+
+@router.post("/game/pause")
+async def pause(request: Request):
+    return await _control_device(request, request.app.state.spotify.pause)
+
+
+@router.post("/game/resume")
+async def resume(request: Request):
+    return await _control_device(request, request.app.state.spotify.resume)

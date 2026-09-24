@@ -62,8 +62,15 @@
 
     <hr>
 
+    <h3>3. Choose Where to Play</h3>
+    <div id="device-picker" hx-get="/lobby/devices" hx-trigger="load">
+        <p>Looking for Spotify devices...</p>
+    </div>
+
+    <hr>
+
     <!-- Game Configuration & Start -->
-    <h3>3. Start Game</h3>
+    <h3>4. Start Game</h3>
     <div id="start-game">
         {% include "partials/start_game_form.html" %}
     </div>
