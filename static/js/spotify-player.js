@@ -8,10 +8,12 @@ window.onSpotifyWebPlaybackSDKReady = () => {
     const controls = document.getElementById("player-controls");
     const toggle = document.getElementById("play-toggle");
     const elapsed = document.getElementById("elapsed");
+    const startMusic = document.getElementById("start-music");
 
     function setPlayerStatus(text, isError = false) {
         statusText.textContent = text;
         controls.classList.add("hidden");
+        startMusic.classList.add("hidden");
         status.className = isError
             ? "message message--error"
             : "message message--status";
@@ -35,6 +37,31 @@ window.onSpotifyWebPlaybackSDKReady = () => {
                 .catch(() => setPlayerStatus("Could not fetch Spotify token", true));
         },
         volume: MAX_VOLUME,
+    });
+
+    // Mobile browsers only let the SDK start audio from a user gesture. Songs
+    // are started by the server, so a tap has to unlock the player beforehand.
+    let unlocked = false;
+
+    function unlockAudio() {
+        if (unlocked) {
+            return;
+        }
+        unlocked = true;
+        Promise.resolve(player.activateElement()).catch(() => (unlocked = false));
+    }
+
+    document.addEventListener("click", unlockAudio, true);
+    document.addEventListener("submit", unlockAudio, true);
+
+    player.addListener("autoplay_failed", () => {
+        unlocked = false;
+        startMusic.classList.remove("hidden");
+    });
+
+    startMusic.addEventListener("click", () => {
+        startMusic.classList.add("hidden");
+        player.resume();
     });
 
     // The SDK only reports the position when the state changes, so the
@@ -63,6 +90,9 @@ window.onSpotifyWebPlaybackSDKReady = () => {
             paused: state.paused,
             reportedAt: performance.now(),
         };
+        if (!state.paused) {
+            startMusic.classList.add("hidden");
+        }
         showPlayback(state.paused);
         renderElapsed();
     });

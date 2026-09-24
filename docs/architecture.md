@@ -191,6 +191,7 @@ Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridg
 - The partial also carries a top-level `<title>`, which htmx uses to update the document title
 - `/game/next-round` only advances from `ROUND_RESULT`; a repeated click returns 204 so the page stays put
 - Forms that stop the song ("Next Round", "End Game", "See Final Leaderboard") carry `data-fade-out`. A capture-phase `submit` listener in the JS holds the submission, fades the SDK volume to zero over 1.5 s, pauses, restores the volume, and then resubmits the form. Because it runs before htmx's own handler, the next track is only requested after the fade
+- Mobile browsers block audio that doesn't start from a user gesture, and songs are started by the server. The first tap or form submit on the game page calls the SDK's `activateElement()` so later songs can play. If the SDK still reports `autoplay_failed`, a "Tap to start the music" button appears and resumes playback
 - The play/pause button in the status line fades out before pausing and fades back in to full volume on resume. All fades run one after another, and the button is disabled while any of them is in progress
 - Reloading `/game` still works: the player reconnects and the current song restarts
 - This keeps JS minimal and lets HTMX handle all game flow navigation

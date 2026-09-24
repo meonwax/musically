@@ -340,6 +340,12 @@ class TestGameRoutes:
         assert 'id="elapsed" class="elapsed" role="timer"' in resp.text
         assert "vinyl" not in resp.text
 
+    def test_game_page_has_hidden_start_music_fallback(self, authed_client: TestClient):
+        self._setup_game()
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert '<button type="button" id="start-music" class="hidden">' in resp.text
+
     def test_game_page_does_not_leak_answer(self, authed_client: TestClient):
         game = self._setup_game()
         with authed_client:

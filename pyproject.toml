@@ -1,6 +1,6 @@
 [project]
 name = "musically"
-version = "0.2.0"
+version = "0.2.1"
 description = "A party-mode song guessing game"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
