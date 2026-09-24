@@ -188,8 +188,9 @@ original release. After a playlist loads, Musically looks up the original
 year of every track on [MusicBrainz](https://musicbrainz.org) in the
 background. MusicBrainz allows one request per second, so large playlists take
 a while (about 5 minutes for 300 tracks). The lobby shows when the lookup is
-done. Games started earlier use Spotify's year for tracks that haven't been
-checked yet.
+done. You don't have to wait: once a game starts, the lookup jumps to the
+current and upcoming rounds, so each song's year is checked within a second
+or two of its round starting.
 
 ## Development
 

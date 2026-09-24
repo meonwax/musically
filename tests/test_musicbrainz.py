@@ -7,6 +7,7 @@ import pytest
 
 from app.game import Track
 from app.musicbrainz import enrich_tracks, lookup_original_year
+from app.project import load_project_info
 
 
 def _mb_response(recordings: list[dict]) -> httpx.Response:
@@ -103,6 +104,15 @@ class TestLookupOriginalYear:
         query = mock_client.get.call_args.kwargs["params"]["query"]
         assert query == 'recording:"Bohemian Rhapsody" AND artist:"Queen"'
 
+    async def test_user_agent_identifies_app(self):
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get = AsyncMock(return_value=_mb_response([]))
+
+        await lookup_original_year("Song", "Artist", client=mock_client)
+        project = load_project_info()
+        user_agent = mock_client.get.call_args.kwargs["headers"]["User-Agent"]
+        assert user_agent == f"Musically/{project.version} ( {project.repository} )"
+
     async def test_query_escapes_quotes(self):
         mock_client = AsyncMock(spec=httpx.AsyncClient)
         mock_client.get = AsyncMock(return_value=_mb_response([]))
@@ -186,6 +196,39 @@ class TestEnrichTracks:
             await enrich_tracks(tracks)
         assert tracks[0].year == 1980
         assert tracks[1].year == 1990
+
+    async def test_marks_tracks_verified(self):
+        tracks = [Track(uri="u:1", name="Song", artists=["Artist"], year=2000)]
+        with patch(
+            "app.musicbrainz.lookup_original_year",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            await enrich_tracks(tracks)
+        assert tracks[0].year_verified is True
+
+    @patch("app.musicbrainz.REQUEST_DELAY", 0)
+    async def test_follows_order_that_changes_during_run(self):
+        a = Track(uri="u:1", name="A", artists=["X"], year=2000)
+        b = Track(uri="u:2", name="B", artists=["X"], year=2000)
+        c = Track(uri="u:3", name="C", artists=["X"], year=2000)
+        order = [a, b, c]
+
+        def pending():
+            while track := next((t for t in order if not t.year_verified), None):
+                yield track
+
+        looked_up = []
+
+        async def fake_lookup(title, artist, *, client):
+            looked_up.append(title)
+            if title == "A":
+                order[:] = [a, c, b]
+            return None
+
+        with patch("app.musicbrainz.lookup_original_year", side_effect=fake_lookup):
+            await enrich_tracks(pending())
+        assert looked_up == ["A", "C", "B"]
 
     async def test_uses_first_artist(self):
         tracks = [

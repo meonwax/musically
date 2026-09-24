@@ -114,7 +114,8 @@ Spotify's album release date is often a remaster or compilation year. After a pl
 - MusicBrainz allows 1 request per second, so the task sleeps between lookups
 - The lobby polls `/lobby/enrichment-status` via HTMX until the task is done
 - Loading another playlist cancels the running task before starting a new one
-- The game can start before enrichment finishes; unchecked tracks keep the Spotify year
+- The game can start before enrichment finishes. The task takes its next track from `GameState.tracks_to_verify()`, which re-evaluates the order on every step: the current round's track first, then the upcoming rounds in play order, then the rest of the playlist. A new round's year is therefore verified within a second or two
+- Requests send a `User-Agent` with the app version and repository URL, as MusicBrainz requires
 
 ## Project Structure
 
@@ -131,6 +132,7 @@ musically/
 │   ├── game.py               # Game state dataclasses and logic
 │   ├── matching.py           # Fuzzy matching logic
 │   ├── musicbrainz.py        # Original release year lookup
+│   ├── project.py            # Version and repository URL from pyproject.toml
 │   ├── templating.py         # Shared Jinja2Templates instance
 │   ├── routes/
 │   │   ├── __init__.py

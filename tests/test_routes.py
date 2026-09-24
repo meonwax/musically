@@ -13,7 +13,7 @@ from app.game import GamePhase, GameState
 from app.main import app
 from app.routes.lobby import _restart_enrichment, _run_enrichment
 from app.spotify import SpotifyTokens
-from app.templating import load_project_info
+from app.project import load_project_info
 from tests.conftest import sample_tracks
 
 

@@ -130,6 +130,46 @@ class TestGameStatePlaylist:
         assert len(game_ready.available_tracks) == 5
 
 
+def _verify_next(tracks) -> Track:
+    track = next(tracks)
+    track.year_verified = True
+    return track
+
+
+class TestTracksToVerify:
+    def test_playlist_order_before_game_starts(self, game_ready: GameState):
+        tracks = game_ready.tracks_to_verify()
+        verified = [_verify_next(tracks) for _ in range(5)]
+        assert verified == game_ready.playlist_tracks
+        assert next(tracks, None) is None
+
+    def test_current_round_then_play_order(self, game_ready: GameState):
+        game_ready.start_game()
+        game_ready.start_round()
+        upcoming = list(reversed(game_ready.available_tracks))
+        tracks = game_ready.tracks_to_verify()
+        assert _verify_next(tracks) is game_ready.current_round.track
+        assert [_verify_next(tracks) for _ in range(4)] == upcoming
+
+    def test_game_started_midway_jumps_to_current_round(self, game_ready: GameState):
+        tracks = game_ready.tracks_to_verify()
+        _verify_next(tracks)
+        game_ready.start_game()
+        game_ready.start_round()
+        current = game_ready.current_round.track
+        if current.year_verified:
+            game_ready.start_round()
+            current = game_ready.current_round.track
+        assert _verify_next(tracks) is current
+
+    def test_skips_verified_tracks(self, game_ready: GameState):
+        for track in game_ready.playlist_tracks[:4]:
+            track.year_verified = True
+        tracks = game_ready.tracks_to_verify()
+        assert _verify_next(tracks) is game_ready.playlist_tracks[4]
+        assert next(tracks, None) is None
+
+
 class TestGameStateRounds:
     def test_start_game_resets_scores(self, game_ready: GameState):
         game_ready.players[0].score = 5

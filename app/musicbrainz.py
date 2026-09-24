@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterable
 
 import httpx
 
 from app.game import Track
 from app.matching import clean_title
+from app.project import load_project_info
 
 logger = logging.getLogger(__name__)
 
+_project = load_project_info()
+
 MB_API_BASE = "https://musicbrainz.org/ws/2"
-MB_USER_AGENT = "Musically/0.1 (https://github.com/musically-game)"
+# MusicBrainz throttles clients without an identifying name, version and contact.
+MB_USER_AGENT = f"Musically/{_project.version} ( {_project.repository} )"
 REQUEST_DELAY = 1.0  # MusicBrainz rate-limit: 1 req/s
 
 
@@ -64,14 +69,15 @@ async def lookup_original_year(
 
 
 async def enrich_tracks(
-    tracks: list[Track],
+    tracks: Iterable[Track],
     *,
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Update each track's year with the original release year from MusicBrainz.
 
-    Only overwrites the year if MusicBrainz reports an earlier one.
-    Sleeps between requests to respect the 1 req/s rate limit.
+    Only overwrites the year if MusicBrainz reports an earlier one, and marks
+    every track it looks up as verified. Sleeps between requests to respect
+    the 1 req/s rate limit.
     """
     own_client = client is None
     if own_client:
@@ -81,6 +87,7 @@ async def enrich_tracks(
         for i, track in enumerate(tracks):
             if i > 0:
                 await asyncio.sleep(REQUEST_DELAY)
+            track.year_verified = True
             primary_artist = track.artists[0] if track.artists else ""
             mb_year = await lookup_original_year(
                 track.name, primary_artist, client=client

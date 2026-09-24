@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import random
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -33,6 +34,7 @@ class Track:
     name: str
     artists: list[str]
     year: int | None = None
+    year_verified: bool = False
 
     @property
     def display_name(self) -> str:
@@ -122,6 +124,25 @@ class GameState:
         self.available_tracks = []
         self.year_enrichment_done = False
         logger.info("Playlist set: %d tracks", len(self.playlist_tracks))
+
+    def tracks_to_verify(self) -> Iterator[Track]:
+        """Yield tracks whose year isn't verified yet, the current round first.
+
+        The order is re-evaluated on every step, so a game started mid-way
+        through the lookup gets its upcoming tracks verified before the rest.
+        """
+        while True:
+            current = [self.current_round.track] if self.current_round else []
+            # Rounds pop from the end of available_tracks.
+            candidates = [
+                *current,
+                *reversed(self.available_tracks),
+                *self.playlist_tracks,
+            ]
+            track = next((t for t in candidates if not t.year_verified), None)
+            if track is None:
+                return
+            yield track
 
     def start_game(self) -> None:
         self.phase = GamePhase.PLAYING

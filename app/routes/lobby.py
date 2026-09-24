@@ -116,7 +116,7 @@ async def remove_player(request: Request, player_name: str = Form(...)):
 
 async def _run_enrichment(game: GameState) -> None:
     try:
-        await enrich_tracks(game.playlist_tracks)
+        await enrich_tracks(game.tracks_to_verify())
     except Exception:
         logger.exception("Year enrichment failed")
     # Not in a `finally`: a cancelled run must not mark a newer playlist done.
