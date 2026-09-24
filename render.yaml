@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: musically
+    runtime: docker
+    plan: free
+    region: frankfurt
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REDIRECT_URI
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: LOG_LEVEL
+        value: INFO

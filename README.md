@@ -60,6 +60,36 @@ docker build -t musically .
 docker run --rm -p 8000:8000 --env-file .env musically
 ```
 
+## Deploy on Render (free)
+
+`render.yaml` is a [Render Blueprint](https://render.com/docs/blueprint-spec)
+for a free web service that builds the `Dockerfile` and redeploys on every
+push to `main`. Render provides HTTPS on an `onrender.com` subdomain.
+
+1. In the [Render Dashboard](https://dashboard.render.com), choose
+   **New > Blueprint** and connect this GitHub repository.
+2. Enter `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and
+   `SPOTIFY_REDIRECT_URI` (`https://<service>.onrender.com/callback`).
+   `SECRET_KEY` is generated. If Render assigns a different subdomain,
+   correct the redirect URI under the service's **Environment** tab.
+3. Add the same redirect URI in the Spotify Developer Dashboard.
+
+Free instances have limits that matter for this app:
+
+- The service spins down after 15 minutes without traffic. The next visit
+  wakes it up, which takes a minute or two, so open the site before the
+  party starts. A running game keeps it awake.
+- Game state and Spotify tokens live in memory, so every deploy, spin-down
+  or restart ends the current game and the host has to log in again. Avoid
+  pushing to `main` during a game.
+
+To try the image with the free plan's resources (0.1 CPU, 512 MB) locally:
+
+```bash
+docker build -t musically .
+docker run --rm --cpus 0.1 --memory 512m -p 8000:8000 --env-file .env musically
+```
+
 ## Production deployment
 
 Production assumes:

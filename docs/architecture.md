@@ -162,6 +162,7 @@ musically/
 │   └── architecture.md        # This file
 ├── config.toml                # Predefined playlists and scoring
 ├── Dockerfile, docker-compose.yml
+├── render.yaml                # Render Blueprint (free web service, deploys on push)
 ├── pyproject.toml
 ├── .env.example               # Template for SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 └── README.md

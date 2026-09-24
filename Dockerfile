@@ -2,6 +2,9 @@ FROM ghcr.io/astral-sh/uv:python3.14-alpine AS builder
 
 WORKDIR /app
 
+# Precompiled bytecode keeps cold starts fast on small CPU shares.
+ENV UV_COMPILE_BYTECODE=1
+
 # Build deps for native extensions (e.g. thefuzz speedup / Levenshtein)
 RUN apk add --no-cache gcc musl-dev
 
