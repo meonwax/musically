@@ -1,3 +1,13 @@
+:root {
+    font-size: 18px;
+}
+
+@media screen and (max-width: 480px) {
+    :root {
+        font-size: 16px;
+    }
+}
+
 .hidden {
     display: none;
 }
@@ -43,7 +53,7 @@
 }
 
 .message--error {
-    color: red;
+    color: var(--uchu-dark-red);
 }
 
 .player-controls {
@@ -52,13 +62,12 @@
 
 .elapsed {
     margin-left: 0.35em;
-    font-family: monospace;
 }
 
 .site-footer {
     margin-top: 2em;
     font-size: 0.85em;
-    color: #666;
+    color: var(--text-color-alt);
 }
 
 .site-footer p {

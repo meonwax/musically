@@ -4,7 +4,7 @@ import logging
 import random
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 
 from app.game_config import ScoringConfig
 from app.matching import check_artist, check_guess, check_year, display_title
@@ -19,9 +19,25 @@ class GamePhase(Enum):
     FINISHED = auto()
 
 
+class PlayerColor(StrEnum):
+    """uchū hues a player's turn is themed in. Purple is the app's own color."""
+
+    RED = "red"
+    ORANGE = "orange"
+    YELLOW = "yellow"
+    GREEN = "green"
+    BLUE = "blue"
+    PINK = "pink"
+
+
+# One color per player, so turns are always told apart.
+MAX_PLAYERS = len(PlayerColor)
+
+
 @dataclass
 class Player:
     name: str
+    color: PlayerColor = PlayerColor.RED
     score: int = 0
     correct_songs: int = 0
     correct_artists: int = 0
@@ -116,14 +132,51 @@ class GameState:
     # since it is the host's setup rather than part of a game.
     playback_device: PlaybackDevice | None = None
 
+    @property
+    def is_full(self) -> bool:
+        return len(self.players) >= MAX_PLAYERS
+
+    @property
+    def turn_color(self) -> PlayerColor | None:
+        rnd = self.current_round
+        if rnd is None or rnd.current_player is None:
+            return None
+        player = self._find_player(rnd.current_player)
+        return player.color if player else None
+
+    def free_colors(self) -> list[PlayerColor]:
+        taken = {p.color for p in self.players}
+        return [c for c in PlayerColor if c not in taken]
+
     def add_player(self, name: str) -> Player | None:
-        if any(p.name == name for p in self.players):
+        if self.is_full:
+            logger.info("Rejected player %r: game is full", name)
+            return None
+        if self._find_player(name):
             logger.info("Rejected duplicate player name: %r", name)
             return None
-        player = Player(name=name)
+        player = Player(name=name, color=self.free_colors()[0])
         self.players.append(player)
-        logger.info("Player added: %r (%d total)", name, len(self.players))
+        logger.info(
+            "Player added: %r color=%s (%d total)", name, player.color, len(self.players)
+        )
         return player
+
+    def set_player_color(self, name: str, color: PlayerColor) -> bool:
+        """Change a player's color. False if another player already has it."""
+        player = self._find_player(name)
+        if player is None:
+            logger.info("Color change ignored, player not found: %r", name)
+            return True
+        if player.color != color and color not in self.free_colors():
+            logger.info("Rejected color %s for %r: taken", color, name)
+            return False
+        player.color = color
+        logger.info("Player %r color=%s", name, color)
+        return True
+
+    def _find_player(self, name: str) -> Player | None:
+        return next((p for p in self.players if p.name == name), None)
 
     def remove_player(self, name: str) -> None:
         if not any(p.name == name for p in self.players):
@@ -266,16 +319,15 @@ class GameState:
 
     def _record(self, rnd: RoundState, guess: RoundGuess) -> RoundGuess:
         rnd.guesses.append(guess)
-        for p in self.players:
-            if p.name == guess.player_name:
-                p.score += guess.points
-                if guess.song_correct:
-                    p.correct_songs += 1
-                if guess.artist_correct:
-                    p.correct_artists += 1
-                if guess.year_correct:
-                    p.correct_years += 1
-                break
+        player = self._find_player(guess.player_name)
+        if player:
+            player.score += guess.points
+            if guess.song_correct:
+                player.correct_songs += 1
+            if guess.artist_correct:
+                player.correct_artists += 1
+            if guess.year_correct:
+                player.correct_years += 1
         rnd.current_player_idx += 1
         if rnd.all_guessed:
             self.phase = GamePhase.ROUND_RESULT

@@ -1,8 +1,19 @@
 {% if game.players %}
+{% set free = game.free_colors() %}
 <ul>
     {% for player in game.players %}
     <li>
         {{ player.name }}
+        <form class="swatches" role="group" aria-label="Color for {{ player.name }}"
+              hx-post="/lobby/set-player-color" hx-target="#player-list" hx-swap="innerHTML">
+            <input type="hidden" name="player_name" value="{{ player.name }}">
+            {% for color in player_colors %}
+            <button type="submit" name="color" value="{{ color }}" class="swatch" data-theme="{{ color }}"
+                    title="{{ color | title }}" aria-label="{{ color | title }}"
+                    aria-pressed="{{ 'true' if color == player.color else 'false' }}"
+                    {%- if color != player.color and color not in free %} disabled{% endif %}></button>
+            {% endfor %}
+        </form>
         <form class="inline-form" hx-post="/lobby/remove-player" hx-target="#player-list" hx-swap="innerHTML">
             <input type="hidden" name="player_name" value="{{ player.name }}">
             <button type="submit">Remove</button>

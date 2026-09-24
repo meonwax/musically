@@ -51,11 +51,9 @@
 <fieldset id="lobby-controls">
     <!-- Player Registration -->
     <h3>2. Add Players</h3>
-    <form hx-post="/lobby/add-player" hx-target="#player-list" hx-swap="innerHTML"
-          hx-on::after-request="this.reset(); this.querySelector('[name=player_name]').focus()">
-        <input type="text" name="player_name" placeholder="Player name" required>
-        <button type="submit">Add Player</button>
-    </form>
+    <div id="add-player">
+        {% include "partials/add_player_form.html" %}
+    </div>
     <div id="player-list">
         {% include "partials/player_list.html" %}
     </div>

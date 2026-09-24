@@ -1,0 +1,8 @@
+{% if game.is_full %}
+<p>The game is full ({{ max_players }} players max).</p>
+{% else %}
+<form hx-post="/lobby/add-player" hx-target="#player-list" hx-swap="innerHTML">
+    <input type="text" name="player_name" placeholder="Player name" required{% if focus_player_input %} autofocus{% endif %}>
+    <button type="submit">Add Player</button>
+</form>
+{% endif %}

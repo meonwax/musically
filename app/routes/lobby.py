@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.game import GamePhase, GameState, PlaybackDevice
+from app.game import MAX_PLAYERS, GamePhase, GameState, PlaybackDevice, PlayerColor
 from app.musicbrainz import enrich_tracks
 from app.routes.auth import is_logged_in
 from app.templating import templates
@@ -76,42 +76,58 @@ async def lobby(request: Request):
     )
 
 
+def _player_update(
+    request: Request,
+    game: GameState,
+    *,
+    error: str | None = None,
+    focus_player_input: bool = False,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/lobby_player_update.html",
+        context={
+            **_lobby_message_context(game, error=error),
+            "focus_player_input": focus_player_input,
+        },
+    )
+
+
 @router.post("/lobby/add-player", response_class=HTMLResponse)
 async def add_player(request: Request, player_name: str = Form(...)):
     game = request.app.state.game
     name = player_name.strip()
+    error = None
     if not name:
-        return templates.TemplateResponse(
-            request,
-            "partials/lobby_player_update.html",
-            context=_lobby_message_context(
-                game, error="Name cannot be empty"
-            ),
-        )
-    if game.add_player(name) is None:
-        return templates.TemplateResponse(
-            request,
-            "partials/lobby_player_update.html",
-            context=_lobby_message_context(
-                game, error=f"'{name}' is already taken"
-            ),
-        )
-    return templates.TemplateResponse(
-        request,
-        "partials/lobby_player_update.html",
-        context=_lobby_message_context(game),
-    )
+        error = "Name cannot be empty"
+    elif game.is_full:
+        error = f"The game is full ({MAX_PLAYERS} players max)"
+    elif game.add_player(name) is None:
+        error = f"'{name}' is already taken"
+    return _player_update(request, game, error=error, focus_player_input=True)
 
 
 @router.post("/lobby/remove-player", response_class=HTMLResponse)
 async def remove_player(request: Request, player_name: str = Form(...)):
     game = request.app.state.game
     game.remove_player(player_name)
-    return templates.TemplateResponse(
-        request,
-        "partials/lobby_player_update.html",
-        context=_lobby_message_context(game),
-    )
+    return _player_update(request, game)
+
+
+@router.post("/lobby/set-player-color", response_class=HTMLResponse)
+async def set_player_color(
+    request: Request, player_name: str = Form(...), color: str = Form(...)
+):
+    game = request.app.state.game
+    try:
+        choice = PlayerColor(color)
+    except ValueError:
+        return _player_update(request, game, error=f"Unknown color '{color}'")
+    if not game.set_player_color(player_name, choice):
+        return _player_update(
+            request, game, error=f"{choice.title()} is already taken"
+        )
+    return _player_update(request, game)
 
 
 async def _run_enrichment(game: GameState) -> None:

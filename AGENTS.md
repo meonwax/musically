@@ -38,6 +38,8 @@ See `docs/architecture.md` for the full architecture and design plan.
 - Use type hints throughout.
 - Keep route handlers thin; business logic belongs in `app/game.py` or `app/matching.py`.
 - No CSS frameworks. Keep styling minimal.
+- Styling builds on `static/css/monospace.css` (a trimmed copy of The Monospace Web). Keep that file close to upstream and put overrides in `theme.css`, `app.css` or page stylesheets.
+- Never hardcode colors. Use the theme variables from `static/css/theme.css` (`--text-color`, `--background-color`, `--color-accent`, ...) so the page follows the player on turn.
 
 ## Testing
 

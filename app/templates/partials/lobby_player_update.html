@@ -1,4 +1,7 @@
 {% include "partials/player_list.html" %}
+<div id="add-player" hx-swap-oob="innerHTML">
+    {% include "partials/add_player_form.html" %}
+</div>
 <div id="start-game" hx-swap-oob="innerHTML">
     {% include "partials/start_game_form.html" %}
 </div>

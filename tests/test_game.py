@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from app.game import (
+    MAX_PLAYERS,
     GamePhase,
     GameState,
     PlaybackDevice,
     Player,
+    PlayerColor,
     RoundState,
     Track,
     compute_points,
@@ -114,6 +116,67 @@ class TestGameStatePlayers:
         game.add_player("Alice")
         game.remove_player("Nobody")
         assert len(game.players) == 1
+
+    def test_add_player_rejected_when_full(self, game: GameState):
+        for i in range(MAX_PLAYERS):
+            game.add_player(f"P{i}")
+        assert game.is_full
+        assert game.add_player("Late") is None
+        assert len(game.players) == MAX_PLAYERS
+
+
+class TestGameStatePlayerColors:
+    def test_players_get_distinct_colors_in_order(self, game: GameState):
+        for i in range(MAX_PLAYERS):
+            game.add_player(f"P{i}")
+        assert [p.color for p in game.players] == list(PlayerColor)
+
+    def test_purple_is_not_a_player_color(self):
+        assert "purple" not in {c.value for c in PlayerColor}
+
+    def test_removed_players_color_is_reused(self, game_with_players: GameState):
+        bob_color = game_with_players.players[1].color
+        game_with_players.remove_player("Bob")
+        assert game_with_players.add_player("Dave").color == bob_color
+
+    def test_first_free_color_skips_taken_ones(self, game: GameState):
+        game.add_player("Alice")
+        game.set_player_color("Alice", PlayerColor.ORANGE)
+        assert game.add_player("Bob").color == PlayerColor.RED
+        assert game.add_player("Charlie").color == PlayerColor.YELLOW
+
+    def test_set_free_color(self, game_with_players: GameState):
+        assert game_with_players.set_player_color("Alice", PlayerColor.PINK)
+        assert game_with_players.players[0].color == PlayerColor.PINK
+        assert PlayerColor.RED in game_with_players.free_colors()
+
+    def test_set_taken_color_is_rejected(self, game_with_players: GameState):
+        bob_color = game_with_players.players[1].color
+        assert not game_with_players.set_player_color("Alice", bob_color)
+        assert game_with_players.players[0].color == PlayerColor.RED
+
+    def test_set_own_color_is_accepted(self, game_with_players: GameState):
+        assert game_with_players.set_player_color("Alice", PlayerColor.RED)
+
+    def test_set_color_of_unknown_player_is_noop(self, game_with_players: GameState):
+        before = [p.color for p in game_with_players.players]
+        assert game_with_players.set_player_color("Nobody", PlayerColor.PINK)
+        assert [p.color for p in game_with_players.players] == before
+
+    def test_turn_color_follows_current_player(self, game_playing: GameState):
+        colors = {p.name: p.color for p in game_playing.players}
+        rnd = game_playing.current_round
+        assert game_playing.turn_color == colors[rnd.current_player]
+        game_playing.skip_turn()
+        assert game_playing.turn_color == colors[rnd.current_player]
+
+    def test_no_turn_color_after_everyone_guessed(self, game_playing: GameState):
+        for _ in game_playing.players:
+            game_playing.skip_turn()
+        assert game_playing.turn_color is None
+
+    def test_no_turn_color_before_game(self, game_with_players: GameState):
+        assert game_with_players.turn_color is None
 
 
 class TestGameStatePlaylist:

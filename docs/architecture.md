@@ -14,7 +14,7 @@ A party-mode web game where players share one device, a song plays from a Spotif
 - **Fuzzy Matching**: `thefuzz` library (Levenshtein distance-based string matching)
 - **State Management**: In-memory Python dataclasses (no database -- state lives only for the server process lifetime)
 - **Package Manager**: [uv](https://docs.astral.sh/uv/)
-- **No CSS framework**: Minimal browser-default styling
+- **No CSS framework**: A trimmed copy of [The Monospace Web](https://github.com/owickstrom/the-monospace-web) stylesheet (`static/css/monospace.css`, MIT), the self-hosted JetBrains Mono font (OFL) and the [uchū simple palette](https://uchu.style/simple.html). See "Styling and Themes"
 
 ## Spotify Integration
 
@@ -108,6 +108,17 @@ Point values come from the `[points]` table in `config.toml` (loaded by `app/gam
 - Per-game leaderboard only; resets when a new game starts
 - Displayed after each round and as a final summary
 
+## Styling and Themes
+
+- Stylesheets load in this order: `reset.css`, `monospace.css` (layout, type, form controls on a character grid), `theme.css` (font faces, palette, themes), then `app.css` and page styles
+- The app theme is uchū purple and uses all three shades: light for the background, dark for text and borders, the mid shade as accent
+- Each player has a `PlayerColor` (red, orange, yellow, green, blue, pink). Purple stays the app's own color, and gray and yin/yang are left out. Colors are unique per game, so a game has at most `MAX_PLAYERS` (6) players
+- New players get the first free color and can pick another in the lobby (`POST /lobby/set-player-color`). A color taken by another player is disabled
+- On the game page the guess form carries `data-turn="<color>"`. `theme.css` switches the whole page with `:root:has([data-turn=...])`, so the theme follows the player on turn without JS. The round result has no turn and falls back to purple
+- A theme defines `--color-light`, `--color-base`, `--color-dark`, `--color-text` and `--color-accent`, from which the Monospace Web variables (`--text-color`, `--background-color`, ...) are derived. Purple, red and blue use their dark shade for text. For orange, yellow, green and pink the dark shade is too light to read on the light shade, so they use yin for text and the dark shade as accent
+- `[data-theme="<color>"]` applies a theme to a single element, as the lobby's color swatches do
+- The five theme colors are registered with `@property` as `<color>`, so `:root` transitions them in 0.4 s when the palette changes. Everything derived from them blends along. The transition is off under `prefers-reduced-motion`
+
 ## Release Year Enrichment
 
 Spotify's album release date is often a remaster or compilation year. After a playlist is loaded, `app/musicbrainz.py` runs as a background `asyncio` task and looks up each track's earliest release year on MusicBrainz, overwriting the Spotify year only when MusicBrainz reports an earlier one.
@@ -146,19 +157,21 @@ musically/
 │       ├── lobby.html         # Player names, playlist input, round config
 │       ├── game.html          # Main game view (loads the Spotify SDK)
 │       ├── partials/
+│       │   ├── add_player_form.html      # Player name input, or a notice once the game is full
 │       │   ├── device_picker.html        # Playback device selection in the lobby
 │       │   ├── guess_form.html           # Current player's guess input
-│       │   ├── lobby_player_update.html  # Player list plus out-of-band start form and messages
+│       │   ├── lobby_player_update.html  # Player list plus out-of-band add form, start form and messages
 │       │   ├── messages.html             # Shared message pane; polls release year lookup
 │       │   ├── messages_oob.html         # Out-of-band swap wrapper for messages.html
-│       │   ├── player_list.html          # Registered players
+│       │   ├── player_list.html          # Registered players with their color swatches
 │       │   ├── round.html                # Round header, scores and guess area; swapped per round
 │       │   ├── round_result.html         # Round summary
 │       │   ├── scoreboard.html           # Current scores
 │       │   └── start_game_form.html      # Round count and start button
 │       └── leaderboard.html   # Final game-over leaderboard
 ├── static/
-│   ├── css/                   # app.css, lobby.css
+│   ├── css/                   # reset, monospace, theme, app and page stylesheets
+│   ├── fonts/                 # JetBrains Mono (variable woff2) and its OFL license
 │   └── js/
 │       └── spotify-player.js  # Playback controls for the SDK and Spotify Connect
 ├── tests/                     # Pytest suite, mirrors app/

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import GamePhase, GameState, PlaybackDevice
+from app.game import MAX_PLAYERS, GamePhase, GameState, PlaybackDevice, PlayerColor
 from app.main import app
 from app.routes.lobby import _restart_enrichment, _run_enrichment
 from app.spotify import PlaybackState, SpotifyTokens
@@ -85,6 +85,14 @@ class TestHomeRoute:
         with authed_client:
             resp = authed_client.get("/")
         assert "Login with Spotify" in resp.text
+
+    def test_stylesheets_and_font_are_served(self, client: TestClient):
+        with client:
+            resp = client.get("/")
+            assets = re.findall(r'href="(/static/[^"?]+)', resp.text)
+            assert "/static/fonts/jetbrains-mono-latin-wght-normal.woff2" in assets
+            for path in [*assets, "/static/fonts/jetbrains-mono-latin-wght-italic.woff2"]:
+                assert client.get(path).status_code == 200, path
 
     def test_footer_shows_project_info(self, client: TestClient):
         project = load_project_info()
@@ -240,6 +248,68 @@ class TestLobbyRoutes:
         assert "Alice" not in resp.text
         assert '<button type="submit" disabled>Start Game</button>' in resp.text
 
+    def test_added_player_gets_color_swatches(self, authed_client: TestClient):
+        with authed_client:
+            resp = authed_client.post("/lobby/add-player", data={"player_name": "Alice"})
+        assert 'aria-label="Color for Alice"' in resp.text
+        assert re.search(r'value="red"[^>]*aria-pressed="true"', resp.text, re.S)
+        assert re.search(r'value="blue"[^>]*aria-pressed="false"\s*>', resp.text, re.S)
+
+    def test_other_players_colors_are_disabled(self, authed_client: TestClient):
+        app.state.game.add_player("Alice")
+        with authed_client:
+            resp = authed_client.post("/lobby/add-player", data={"player_name": "Bob"})
+        bob_row = resp.text.split("Color for Bob")[1]
+        assert re.search(r'value="red"[^>]*disabled', bob_row, re.S)
+
+    def test_add_player_refocuses_input(self, authed_client: TestClient):
+        with authed_client:
+            resp = authed_client.post("/lobby/add-player", data={"player_name": "Alice"})
+        assert '<div id="add-player" hx-swap-oob="innerHTML">' in resp.text
+        assert 'name="player_name" placeholder="Player name" required autofocus' in resp.text
+
+    def test_full_game_hides_add_form_and_rejects_players(
+        self, authed_client: TestClient
+    ):
+        for i in range(MAX_PLAYERS):
+            app.state.game.add_player(f"P{i}")
+        with authed_client:
+            page = authed_client.get("/lobby")
+            resp = authed_client.post("/lobby/add-player", data={"player_name": "Late"})
+        assert f"The game is full ({MAX_PLAYERS} players max)" in page.text
+        assert 'placeholder="Player name"' not in page.text
+        assert f"The game is full ({MAX_PLAYERS} players max)" in resp.text
+        assert len(app.state.game.players) == MAX_PLAYERS
+
+    def test_set_player_color(self, authed_client: TestClient):
+        app.state.game.add_player("Alice")
+        with authed_client:
+            resp = authed_client.post(
+                "/lobby/set-player-color", data={"player_name": "Alice", "color": "blue"}
+            )
+        assert resp.status_code == 200
+        assert app.state.game.players[0].color == PlayerColor.BLUE
+        assert re.search(r'value="blue"[^>]*aria-pressed="true"', resp.text, re.S)
+
+    def test_set_taken_player_color(self, authed_client: TestClient):
+        app.state.game.add_player("Alice")
+        app.state.game.add_player("Bob")
+        with authed_client:
+            resp = authed_client.post(
+                "/lobby/set-player-color", data={"player_name": "Bob", "color": "red"}
+            )
+        assert "Red is already taken" in resp.text
+        assert app.state.game.players[1].color == PlayerColor.ORANGE
+
+    def test_set_unknown_player_color(self, authed_client: TestClient):
+        app.state.game.add_player("Alice")
+        with authed_client:
+            resp = authed_client.post(
+                "/lobby/set-player-color", data={"player_name": "Alice", "color": "purple"}
+            )
+        assert "Unknown color &#39;purple&#39;" in resp.text
+        assert app.state.game.players[0].color == PlayerColor.RED
+
     def test_start_game_without_players(self, authed_client: TestClient):
         game = app.state.game
         game.set_playlist(sample_tracks())
@@ -371,7 +441,29 @@ class TestGameRoutes:
         with authed_client:
             resp = authed_client.get("/game")
         assert f'src="/static/js/spotify-player.js?v={version}"' in resp.text
-        assert f'href="/static/css/app.css?v={version}"' in resp.text
+        for sheet in ("reset", "monospace", "theme", "app"):
+            assert f'href="/static/css/{sheet}.css?v={version}"' in resp.text
+
+    def test_page_takes_turn_players_color(self, authed_client: TestClient):
+        game = self._setup_game()
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert f'data-turn="{game.turn_color}"' in resp.text
+
+    def test_guess_switches_to_next_players_color(self, authed_client: TestClient):
+        game = self._setup_game()
+        first = game.turn_color
+        with authed_client:
+            resp = authed_client.post("/game/guess", data={"guess": "x"})
+        assert game.turn_color != first
+        assert f'data-turn="{game.turn_color}"' in resp.text
+
+    def test_round_result_drops_turn_color(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.skip_turn()
+        with authed_client:
+            resp = authed_client.post("/game/skip")
+        assert "data-turn" not in resp.text
 
     def test_game_page_does_not_leak_answer(self, authed_client: TestClient):
         game = self._setup_game()
