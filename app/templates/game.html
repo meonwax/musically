@@ -9,7 +9,13 @@
 
 {% block content %}
 <div id="game-messages" class="message-pane" aria-live="polite">
-    <p id="player-status" class="message message--status">Connecting to Spotify...</p>
+    <p id="player-status" class="message message--status">
+        <span id="player-status-text">Connecting to Spotify...</span>
+        <span id="player-controls" class="player-controls hidden">
+            <button type="button" id="play-toggle" aria-label="Pause" title="Pause">&#x23F8;&#xFE0E;</button>
+            <span id="elapsed" class="elapsed" role="timer">0:00</span>
+        </span>
+    </p>
 </div>
 
 <!-- Submitted by the JS once the player is ready. Later rounds are swapped

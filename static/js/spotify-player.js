@@ -1,17 +1,29 @@
 window.onSpotifyWebPlaybackSDKReady = () => {
+    const MAX_VOLUME = 1;
+    const PAUSE_ICON = "\u23F8\uFE0E";
+    const PLAY_ICON = "\u25B6\uFE0E";
+
+    const status = document.getElementById("player-status");
+    const statusText = document.getElementById("player-status-text");
+    const controls = document.getElementById("player-controls");
+    const toggle = document.getElementById("play-toggle");
+    const elapsed = document.getElementById("elapsed");
+
     function setPlayerStatus(text, isError = false) {
-        const status = document.getElementById("player-status");
-        status.textContent = text;
+        statusText.textContent = text;
+        controls.classList.add("hidden");
         status.className = isError
             ? "message message--error"
             : "message message--status";
     }
 
-    function setPlayingStatus() {
-        const status = document.getElementById("player-status");
+    function showPlayback(paused) {
+        statusText.textContent = paused ? "Paused" : "Playing song...";
+        toggle.textContent = paused ? PLAY_ICON : PAUSE_ICON;
+        toggle.setAttribute("aria-label", paused ? "Play" : "Pause");
+        toggle.title = paused ? "Play" : "Pause";
+        controls.classList.remove("hidden");
         status.className = "message message--status";
-        status.innerHTML =
-            'Playing song... <span class="vinyl-icon" aria-hidden="true"><span class="vinyl-icon__disc">\uD83D\uDCBF</span></span>';
     }
 
     const player = new Spotify.Player({
@@ -22,13 +34,37 @@ window.onSpotifyWebPlaybackSDKReady = () => {
                 .then((data) => cb(data.access_token))
                 .catch(() => setPlayerStatus("Could not fetch Spotify token", true));
         },
-        volume: 0.8,
+        volume: MAX_VOLUME,
     });
 
-    player.addListener("player_state_changed", (state) => {
-        if (state && !state.paused) {
-            setPlayingStatus();
+    // The SDK only reports the position when the state changes, so the
+    // elapsed time is extrapolated from the last report while playing.
+    let playback = null;
+
+    function renderElapsed() {
+        if (!playback) {
+            return;
         }
+        const ms = playback.position
+            + (playback.paused ? 0 : performance.now() - playback.reportedAt);
+        const seconds = Math.floor(ms / 1000);
+        elapsed.textContent =
+            Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    }
+
+    setInterval(renderElapsed, 250);
+
+    player.addListener("player_state_changed", (state) => {
+        if (!state) {
+            return;
+        }
+        playback = {
+            position: state.position,
+            paused: state.paused,
+            reportedAt: performance.now(),
+        };
+        showPlayback(state.paused);
+        renderElapsed();
     });
 
     player.addListener("ready", ({ device_id }) => {
@@ -56,19 +92,54 @@ window.onSpotifyWebPlaybackSDKReady = () => {
     const FADE_MS = 1500;
     const FADE_STEPS = 15;
 
+    async function ramp(from, to) {
+        for (let step = 1; step <= FADE_STEPS; step++) {
+            await player.setVolume(from + (to - from) * (step / FADE_STEPS));
+            await new Promise((resolve) => setTimeout(resolve, FADE_MS / FADE_STEPS));
+        }
+    }
+
     async function fadeOut() {
         const state = await player.getCurrentState();
         if (!state || state.paused) {
             return;
         }
-        const volume = await player.getVolume();
-        for (let step = 1; step <= FADE_STEPS; step++) {
-            await player.setVolume(volume * (1 - step / FADE_STEPS));
-            await new Promise((resolve) => setTimeout(resolve, FADE_MS / FADE_STEPS));
-        }
+        await ramp(MAX_VOLUME, 0);
         await player.pause();
-        await player.setVolume(volume);
     }
+
+    async function fadeIn() {
+        await player.setVolume(0);
+        await player.resume();
+        await ramp(0, MAX_VOLUME);
+    }
+
+    // All fades drive the same volume, so they run one after another, and the
+    // toggle stays disabled until none are left.
+    let fadeQueue = Promise.resolve();
+    let queuedFades = 0;
+
+    function queueFade(task) {
+        queuedFades++;
+        toggle.disabled = true;
+        fadeQueue = fadeQueue
+            .then(task)
+            .catch(() => player.setVolume(MAX_VOLUME).catch(() => {}))
+            .finally(() => {
+                queuedFades--;
+                toggle.disabled = queuedFades > 0;
+            });
+        return fadeQueue;
+    }
+
+    toggle.addEventListener("click", () => {
+        queueFade(async () => {
+            const state = await player.getCurrentState();
+            if (state) {
+                await (state.paused ? fadeIn() : fadeOut());
+            }
+        });
+    });
 
     // Capture phase runs before htmx's own submit handler on the form, so the
     // request (and with it the next track) waits until the fade is done.
@@ -84,12 +155,13 @@ window.onSpotifyWebPlaybackSDKReady = () => {
         }
         form.dataset.fade = "running";
         form.querySelectorAll("button").forEach((button) => (button.disabled = true));
-        fadeOut()
-            .catch(() => {})
-            .finally(() => {
-                form.dataset.fade = "done";
-                form.requestSubmit();
-            });
+        queueFade(async () => {
+            await fadeOut().catch(() => {});
+            await player.setVolume(MAX_VOLUME);
+        }).then(() => {
+            form.dataset.fade = "done";
+            form.requestSubmit();
+        });
     }, true);
 
     player.connect();

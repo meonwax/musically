@@ -319,6 +319,14 @@ class TestGameRoutes:
         assert resp.status_code == 200
         assert "Round 1" in resp.text
 
+    def test_game_page_has_player_controls(self, authed_client: TestClient):
+        self._setup_game()
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert 'id="play-toggle"' in resp.text
+        assert 'id="elapsed" class="elapsed" role="timer"' in resp.text
+        assert "vinyl" not in resp.text
+
     def test_game_page_does_not_leak_answer(self, authed_client: TestClient):
         game = self._setup_game()
         with authed_client:
