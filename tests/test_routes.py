@@ -346,6 +346,14 @@ class TestGameRoutes:
             resp = authed_client.get("/game")
         assert '<button type="button" id="start-music" class="hidden">' in resp.text
 
+    def test_static_urls_carry_version(self, authed_client: TestClient):
+        self._setup_game()
+        version = load_project_info().version
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert f'src="/static/js/spotify-player.js?v={version}"' in resp.text
+        assert f'href="/static/css/app.css?v={version}"' in resp.text
+
     def test_game_page_does_not_leak_answer(self, authed_client: TestClient):
         game = self._setup_game()
         with authed_client:

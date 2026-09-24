@@ -28,7 +28,7 @@ See `docs/architecture.md` for the full architecture and design plan.
 
 ## Versioning
 
-- The version in `pyproject.toml` is shown in the page footer. Bump it in every commit that changes the app (code, templates, static files, `config.toml`, `Dockerfile`), not for commits that only touch docs or tests.
+- The version in `pyproject.toml` is shown in the page footer and appended to static file URLs (`?v=`) so browsers fetch changed CSS and JS. Bump it in every commit that changes the app (code, templates, static files, `config.toml`, `Dockerfile`), not for commits that only touch docs or tests.
 - Bump with `uv version --bump minor` for new features and `uv version --bump patch` for fixes and small tweaks. This updates `pyproject.toml` and `uv.lock` together; commit both.
 
 ## Code Style

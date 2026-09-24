@@ -58,7 +58,7 @@ window.onSpotifyWebPlaybackSDKReady = () => {
     // loaded, so some browsers (e.g. Brave blocking autoplay) keep refusing
     // after the first song failed. Then only the site settings can help.
     const RETRY_TIMEOUT_MS = 5000;
-    let retriedAfterTap = false;
+    let tappedStart = false;
     let blockedByBrowser = false;
 
     function showBlockedHint() {
@@ -72,21 +72,27 @@ window.onSpotifyWebPlaybackSDKReady = () => {
 
     player.addListener("autoplay_failed", () => {
         unlocked = false;
-        if (retriedAfterTap) {
+        if (tappedStart) {
             showBlockedHint();
             return;
         }
         startMusic.classList.remove("hidden");
     });
 
+    // The SDK's events can arrive in any order (it may report playing before
+    // autoplay_failed), so the outcome is checked on the player itself.
     startMusic.addEventListener("click", () => {
         startMusic.classList.add("hidden");
-        retriedAfterTap = true;
+        tappedStart = true;
         document.getElementById("play-track-form").requestSubmit();
         setTimeout(() => {
-            if (retriedAfterTap && !blockedByBrowser) {
-                showBlockedHint();
-            }
+            player.getCurrentState()
+                .then((state) => {
+                    if (!state || state.paused) {
+                        showBlockedHint();
+                    }
+                })
+                .catch(showBlockedHint);
         }, RETRY_TIMEOUT_MS);
     });
 
@@ -117,8 +123,6 @@ window.onSpotifyWebPlaybackSDKReady = () => {
             reportedAt: performance.now(),
         };
         if (!state.paused) {
-            retriedAfterTap = false;
-            blockedByBrowser = false;
             startMusic.classList.add("hidden");
         }
         if (blockedByBrowser) {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Musically{% block title_suffix %}{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/css/app.css?v={{ project.version }}">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     {% block head %}{% endblock %}
 </head>
