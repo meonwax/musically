@@ -1,0 +1,23 @@
+{% if autoplay %}
+<title>Musically - Round {{ game.round_number }}</title>
+<span hx-post="/game/play-track" hx-trigger="load" hx-include="#device-id" hx-swap="none"></span>
+{% endif %}
+<h2>
+    Round {{ game.round_number }}{% if game.total_rounds > 0 %} / {{ game.total_rounds }}{% endif %}
+</h2>
+
+<hr>
+
+<h3>Scores</h3>
+{% include "partials/scoreboard.html" %}
+
+<hr>
+
+<!-- Guess area (HTMX-swapped) -->
+<div id="guess-area">
+    {% if game.phase.name == "ROUND_RESULT" %}
+        {% include "partials/round_result.html" %}
+    {% else %}
+        {% include "partials/guess_form.html" %}
+    {% endif %}
+</div>

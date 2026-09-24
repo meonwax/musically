@@ -147,6 +147,7 @@ musically/
 │       │   ├── messages.html             # Shared message pane; polls release year lookup
 │       │   ├── messages_oob.html         # Out-of-band swap wrapper for messages.html
 │       │   ├── player_list.html          # Registered players
+│       │   ├── round.html                # Round header, scores and guess area; swapped per round
 │       │   ├── round_result.html         # Round summary
 │       │   ├── scoreboard.html           # Current scores
 │       │   └── start_game_form.html      # Round count and start button
@@ -183,7 +184,11 @@ Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridg
 - `game.html` contains a hidden HTMX form (`#play-track-form`, `hx-post="/game/play-track"`) with an empty `device_id` field
 - When the SDK fires `ready`, the JS writes the device ID into that field and submits the form
 - The server looks up the current round's track and starts playback on that device
-- Each round is a full page load of `/game`, so the player reconnects and playback restarts per round
+- Only the first round loads `/game` as a full page. "Next Round" (`POST /game/next-round`) swaps `partials/round.html` into `#round`, so the SDK player and its device survive across rounds
+- The swapped-in partial contains an element with `hx-trigger="load"` that posts to `/game/play-track` with `hx-include="#device-id"`, starting the new track without any extra JS. If the player isn't ready yet the device ID is empty, the request is a no-op, and the `ready` handler starts playback instead
+- The partial also carries a top-level `<title>`, which htmx uses to update the document title
+- `/game/next-round` only advances from `ROUND_RESULT`; a repeated click returns 204 so the page stays put
+- Reloading `/game` still works: the player reconnects and the current song restarts
 - This keeps JS minimal and lets HTMX handle all game flow navigation
 
 ## Session Management

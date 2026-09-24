@@ -73,15 +73,21 @@ async def skip_turn(request: Request):
     return _guess_area(request, game)
 
 
-@router.post("/game/next-round")
+@router.post("/game/next-round", response_class=HTMLResponse)
 async def next_round(request: Request):
     game = request.app.state.game
+    if game.phase != GamePhase.ROUND_RESULT:
+        # Repeated click after the next round already started: keep the page.
+        return HTMLResponse("", status_code=204)
     if game.is_game_over():
         logger.info("Last round complete, ending game")
         game.end_game()
-        return RedirectResponse("/leaderboard", status_code=303)
+        return _htmx_redirect("/leaderboard")
     game.start_round()
-    return RedirectResponse("/game", status_code=303)
+    return templates.TemplateResponse(
+        request, "partials/round.html",
+        context={"game": game, "round": game.current_round, "autoplay": True},
+    )
 
 
 @router.post("/game/end")
@@ -109,9 +115,11 @@ async def leaderboard(request: Request):
 
 
 @router.post("/game/play-track")
-async def play_track(request: Request, device_id: str = Form(...)):
+async def play_track(request: Request, device_id: str = Form("")):
     game = request.app.state.game
-    if game.current_round:
+    # Empty when a round is swapped in before the player is ready; the
+    # player's "ready" handler starts playback in that case.
+    if game.current_round and device_id:
         track = game.current_round.track
         logger.info(
             "Playback requested: round=%d device=%s track=%r",

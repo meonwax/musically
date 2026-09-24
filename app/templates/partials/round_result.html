@@ -30,11 +30,11 @@
 
 <br>
 {% if game.is_game_over() %}
-<form action="/leaderboard" method="get">
+<form action="/game/end" method="post">
     <button type="submit">See Final Leaderboard</button>
 </form>
 {% else %}
-<form action="/game/next-round" method="post">
+<form hx-post="/game/next-round" hx-target="#round" hx-swap="innerHTML" hx-disabled-elt="find button">
     <button type="submit">Next Round</button>
 </form>
 {% endif %}

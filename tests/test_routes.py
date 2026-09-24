@@ -399,16 +399,64 @@ class TestGameRoutes:
         assert game.phase == GamePhase.ROUND_RESULT
         assert "Answer" in resp.text or "Result" in resp.text
 
-    def test_next_round(self, authed_client: TestClient):
-        game = self._setup_game()
-        rnd = game.current_round
-        for _ in range(len(rnd.player_order)):
+    @staticmethod
+    def _finish_round(game) -> None:
+        for _ in range(len(game.current_round.player_order)):
             game.skip_turn()
+
+    def test_next_round_swaps_in_new_round(self, authed_client: TestClient):
+        game = self._setup_game()
+        self._finish_round(game)
         with authed_client:
             resp = authed_client.post("/game/next-round")
-        assert resp.status_code == 303
-        assert resp.headers["location"] == "/game"
+        assert resp.status_code == 200
         assert game.round_number == 2
+        assert game.phase == GamePhase.PLAYING
+        assert "Round 2 / 3" in resp.text
+        assert "<title>Musically - Round 2</title>" in resp.text
+        assert f"{game.current_round.current_player}'s turn" in resp.text
+        assert 'hx-post="/game/play-track" hx-trigger="load"' in resp.text
+        assert game.current_round.track.name not in resp.text
+
+    def test_next_round_ignores_repeated_click(self, authed_client: TestClient):
+        game = self._setup_game()
+        self._finish_round(game)
+        with authed_client:
+            authed_client.post("/game/next-round")
+            resp = authed_client.post("/game/next-round")
+        assert resp.status_code == 204
+        assert game.round_number == 2
+
+    def test_next_round_after_last_round_ends_game(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.total_rounds = 1
+        self._finish_round(game)
+        with authed_client:
+            resp = authed_client.post("/game/next-round")
+        assert resp.headers["HX-Redirect"] == "/leaderboard"
+        assert game.phase == GamePhase.FINISHED
+
+    def test_last_round_result_ends_game(self, authed_client: TestClient):
+        """"See Final Leaderboard" must end the game so "Play Again" keeps the players."""
+        game = self._setup_game()
+        game.total_rounds = 1
+        rnd = game.current_round
+        with authed_client:
+            for _ in range(len(rnd.player_order)):
+                resp = authed_client.post("/game/skip")
+            assert 'action="/game/end"' in resp.text
+            authed_client.post("/game/end")
+            authed_client.get("/lobby")
+        assert [p.name for p in game.players] == ["Alice", "Bob"]
+
+    def test_game_page_does_not_autoplay_before_player_ready(
+        self, authed_client: TestClient
+    ):
+        self._setup_game()
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert 'hx-trigger="load"' not in resp.text
+        assert 'id="round"' in resp.text
 
     def test_end_game(self, authed_client: TestClient):
         self._setup_game()
@@ -442,6 +490,18 @@ class TestGameRoutes:
             resp = authed_client.post("/game/play-track", data={"device_id": "dev1"})
         assert resp.status_code == 200
         mock_play.assert_awaited_once_with(game.current_round.track.uri, "dev1")
+
+    def test_play_track_without_device_is_noop(self, authed_client: TestClient):
+        self._setup_game()
+        with (
+            patch.object(
+                app.state.spotify, "play_track", new_callable=AsyncMock
+            ) as mock_play,
+            authed_client,
+        ):
+            resp = authed_client.post("/game/play-track", data={"device_id": ""})
+        assert resp.status_code == 200
+        mock_play.assert_not_awaited()
 
 
 class TestLeaderboardRoute:
