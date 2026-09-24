@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: musically
+    name: Musically
     runtime: docker
     plan: free
     region: frankfurt
