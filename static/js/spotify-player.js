@@ -53,5 +53,44 @@ window.onSpotifyWebPlaybackSDKReady = () => {
         setPlayerStatus("Account error (Premium required): " + message, true);
     });
 
+    const FADE_MS = 1500;
+    const FADE_STEPS = 15;
+
+    async function fadeOut() {
+        const state = await player.getCurrentState();
+        if (!state || state.paused) {
+            return;
+        }
+        const volume = await player.getVolume();
+        for (let step = 1; step <= FADE_STEPS; step++) {
+            await player.setVolume(volume * (1 - step / FADE_STEPS));
+            await new Promise((resolve) => setTimeout(resolve, FADE_MS / FADE_STEPS));
+        }
+        await player.pause();
+        await player.setVolume(volume);
+    }
+
+    // Capture phase runs before htmx's own submit handler on the form, so the
+    // request (and with it the next track) waits until the fade is done.
+    document.addEventListener("submit", (event) => {
+        const form = event.target;
+        if (!form.matches("[data-fade-out]") || form.dataset.fade === "done") {
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (form.dataset.fade === "running") {
+            return;
+        }
+        form.dataset.fade = "running";
+        form.querySelectorAll("button").forEach((button) => (button.disabled = true));
+        fadeOut()
+            .catch(() => {})
+            .finally(() => {
+                form.dataset.fade = "done";
+                form.requestSubmit();
+            });
+    }, true);
+
     player.connect();
 };

@@ -449,6 +449,20 @@ class TestGameRoutes:
             authed_client.get("/lobby")
         assert [p.name for p in game.players] == ["Alice", "Bob"]
 
+    def test_song_stopping_forms_fade_out(self, authed_client: TestClient):
+        game = self._setup_game()
+        with authed_client:
+            page = authed_client.get("/game").text
+            self._finish_round(game)
+            next_round = authed_client.get("/game").text
+            game.total_rounds = 1
+            last_round = authed_client.get("/game").text
+        assert 'action="/game/end" method="post" class="section-gap" data-fade-out' in page
+        assert 'hx-post="/game/next-round"' in next_round
+        assert next_round.count("data-fade-out") == 2
+        assert last_round.count("data-fade-out") == 2
+        assert "See Final Leaderboard" in last_round
+
     def test_game_page_does_not_autoplay_before_player_ready(
         self, authed_client: TestClient
     ):

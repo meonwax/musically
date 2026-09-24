@@ -188,6 +188,7 @@ Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridg
 - The swapped-in partial contains an element with `hx-trigger="load"` that posts to `/game/play-track` with `hx-include="#device-id"`, starting the new track without any extra JS. If the player isn't ready yet the device ID is empty, the request is a no-op, and the `ready` handler starts playback instead
 - The partial also carries a top-level `<title>`, which htmx uses to update the document title
 - `/game/next-round` only advances from `ROUND_RESULT`; a repeated click returns 204 so the page stays put
+- Forms that stop the song ("Next Round", "End Game", "See Final Leaderboard") carry `data-fade-out`. A capture-phase `submit` listener in the JS holds the submission, fades the SDK volume to zero over 1.5 s, pauses, restores the volume, and then resubmits the form. Because it runs before htmx's own handler, the next track is only requested after the fade
 - Reloading `/game` still works: the player reconnects and the current song restarts
 - This keeps JS minimal and lets HTMX handle all game flow navigation
 
