@@ -111,6 +111,8 @@ Point values come from the `[points]` table in `config.toml` (loaded by `app/gam
 ## Styling and Themes
 
 - Stylesheets load in this order: `reset.css`, `monospace.css` (layout, type, form controls on a character grid), `theme.css` (font faces, palette, themes), then `app.css` and page styles
+- `base.html` opens every page with The Monospace Web's header table: title, subtitle and a language selector. The selector preselects the browser's language from `Accept-Language` (`app/i18n.py`, English or German, falling back to English). Switching languages is not implemented yet. The app version is in the footer
+- Pages are laid out for phones, tablets and desktop browsers alike. Rows wrap instead of overflowing, since `body` cuts off horizontal overflow, and wide tables scroll inside `.table-scroll`
 - The app theme is uchū purple and uses all three shades: light for the background, dark for text and borders, the mid shade as accent
 - Each player has a `PlayerColor` (red, orange, yellow, green, blue, pink). Purple stays the app's own color, and gray and yin/yang are left out. Colors are unique per game, so a game has at most `MAX_PLAYERS` (6) players
 - New players get the first free color and can pick another in the lobby (`POST /lobby/set-player-color`). A color taken by another player is disabled
@@ -142,6 +144,7 @@ musically/
 │   ├── middleware.py         # Request logging
 │   ├── spotify.py            # Spotify Web API client (auth, playlist, playback)
 │   ├── game.py               # Game state dataclasses and logic
+│   ├── i18n.py               # Supported languages, browser language detection
 │   ├── matching.py           # Fuzzy matching logic
 │   ├── musicbrainz.py        # Original release year lookup
 │   ├── project.py            # Version and repository URL from pyproject.toml

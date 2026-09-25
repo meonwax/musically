@@ -1,5 +1,6 @@
 :root {
     font-size: 18px;
+    --font-size-small: 0.8rem;
 }
 
 @media screen and (max-width: 480px) {
@@ -28,6 +29,122 @@
     width: 8em;
 }
 
+.header .subtitle {
+    color: var(--text-color-alt);
+}
+
+.header td:last-child {
+    vertical-align: middle;
+}
+
+.header select {
+    font-size: var(--font-size-small);
+}
+
+@media screen and (max-width: 480px) {
+    .header h1 {
+        font-size: 1.5rem;
+    }
+}
+
+details ::marker {
+    content: "▶\00a0";
+}
+
+details[open] ::marker {
+    content: "▼\00a0";
+}
+
+select {
+    border: var(--border-thickness) solid var(--text-color);
+    padding:
+        calc(var(--line-height) / 2 - var(--border-thickness))
+        3ch
+        calc(var(--line-height) / 2 - var(--border-thickness))
+        calc(1ch - var(--border-thickness));
+    margin: 0;
+    font: inherit;
+    height: calc(var(--line-height) * 2);
+    max-width: 100%;
+    color: var(--text-color);
+    background-color: var(--background-color);
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--text-color) 50%),
+        linear-gradient(135deg, var(--text-color) 50%, transparent 50%);
+    /* Whole pixels, so the two halves of the arrow meet without a seam. */
+    background-position:
+        right 15px center,
+        right 10px center;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    appearance: none;
+    cursor: pointer;
+}
+
+select:focus {
+    --border-thickness: 3px;
+    outline: none;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button:disabled:active {
+    transform: none;
+}
+
+/* An input or select that takes the free width, with its buttons beside it. */
+.input-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--line-height) 1ch;
+}
+
+.input-row > * {
+    margin-top: 0;
+}
+
+.input-row > input,
+.input-row > select {
+    flex: 1 1 16ch;
+    width: auto;
+    min-width: 0;
+}
+
+.input-row > .input-narrow {
+    flex: 0 0 10ch;
+}
+
+.input-row > .button-primary {
+    flex: 1 1 auto;
+}
+
+.button-primary {
+    background: var(--text-color);
+    border-color: var(--text-color);
+    color: var(--background-color);
+}
+
+.button-primary:hover {
+    background: color-mix(in oklch, var(--text-color) 80%, var(--background-color));
+}
+
+.button-primary:disabled:hover {
+    background: var(--text-color);
+}
+
+/* The page clips horizontal overflow, so wide tables scroll inside this. */
+.table-scroll {
+    overflow-x: auto;
+}
+
+.table-scroll > table {
+    top: 0;
+    margin-bottom: 0;
+}
+
 .data-table {
     border-collapse: collapse;
     border: 1px solid;
@@ -44,16 +161,21 @@
 }
 
 .message-pane {
-    margin-bottom: 1em;
+    margin-bottom: var(--line-height);
 }
 
 .message {
     margin: 0;
-    line-height: 1.5;
+    border: var(--border-thickness) solid currentColor;
+    padding: calc(var(--line-height) / 2 - var(--border-thickness)) calc(1ch - var(--border-thickness));
 }
 
 .message--error {
     color: var(--uchu-dark-red);
+}
+
+.hint {
+    color: var(--text-color-alt);
 }
 
 .player-controls {
@@ -65,13 +187,13 @@
 }
 
 .site-footer {
-    margin-top: 2em;
-    font-size: 0.85em;
+    margin-top: calc(var(--line-height) * 2);
     color: var(--text-color-alt);
+    font-size: var(--font-size-small);
 }
 
 .site-footer p {
-    margin: 0.25em 0;
+    margin: 0;
 }
 
 .site-footer a {

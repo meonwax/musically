@@ -1,6 +1,7 @@
 <form action="/lobby/start" method="post">
-    <label for="total_rounds">Number of rounds (0 = endless):</label>
-    <input type="number" name="total_rounds" id="total_rounds" value="10" min="0"{% if not game.players %} disabled{% endif %}>
-    <br><br>
-    <button type="submit"{% if not game.players %} disabled{% endif %}>Start Game</button>
+    <label for="total_rounds">Rounds (0 = endless)</label>
+    <div class="input-row">
+        <input type="number" name="total_rounds" id="total_rounds" class="input-narrow" value="10" min="0"{% if not game.players %} disabled{% endif %}>
+        <button type="submit" class="button-primary"{% if not game.players %} disabled{% endif %}>Start Game</button>
+    </div>
 </form>

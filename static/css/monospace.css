@@ -163,6 +163,16 @@ th {
   width: 100%;
 }
 
+.header {
+  margin-bottom: calc(var(--line-height) * 2);
+}
+.header h1 {
+  margin: 0;
+}
+.header tr td:last-child {
+  text-align: right;
+}
+
 p {
   word-break: break-word;
   word-wrap: break-word;

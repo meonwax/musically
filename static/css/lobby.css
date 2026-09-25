@@ -6,7 +6,7 @@
 .htmx-request.htmx-indicator {
     display: inline-flex;
     align-items: center;
-    gap: 0.5em;
+    gap: 1ch;
 }
 
 .spinner {
@@ -29,15 +29,35 @@ fieldset:disabled {
     opacity: 0.6;
 }
 
-.hint {
-    font-size: 0.9em;
-    color: var(--text-color-alt);
+details form {
+    margin-top: var(--line-height);
+}
+
+.player-table td {
+    vertical-align: middle;
+}
+
+/* Name and swatches share a line when there is room, else the swatches wrap below. */
+.player-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--line-height) / 2) 2ch;
+}
+
+.player-row > * {
+    margin-top: 0;
+}
+
+.player-name {
+    flex: 1 1 12ch;
+    font-weight: var(--font-weight-medium);
+    overflow-wrap: anywhere;
 }
 
 .swatches {
-    display: inline-flex;
+    display: flex;
     gap: 1ch;
-    vertical-align: middle;
 }
 
 .swatches > * {
@@ -46,7 +66,8 @@ fieldset:disabled {
 
 .swatch,
 .swatch:hover {
-    width: 4ch;
+    width: 3ch;
+    padding: 0;
     background: var(--color-base);
     border-color: var(--color-dark);
 }
@@ -58,9 +79,4 @@ fieldset:disabled {
 
 .swatch:disabled {
     opacity: 0.25;
-    cursor: not-allowed;
-}
-
-.swatch:disabled:active {
-    transform: none;
 }

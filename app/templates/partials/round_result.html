@@ -6,6 +6,7 @@
     {% if round.track.year %} ({{ round.track.year }}){% endif %}
 </p>
 
+<div class="table-scroll">
 <table class="data-table">
     <tr>
         <th>Player</th>
@@ -24,6 +25,7 @@
     </tr>
     {% endfor %}
 </table>
+</div>
 
 <h3>Current Scores</h3>
 {% include "partials/scoreboard.html" %}

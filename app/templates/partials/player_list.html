@@ -1,26 +1,39 @@
 {% if game.players %}
 {% set free = game.free_colors() %}
-<ul>
-    {% for player in game.players %}
-    <li>
-        {{ player.name }}
-        <form class="swatches" role="group" aria-label="Color for {{ player.name }}"
-              hx-post="/lobby/set-player-color" hx-target="#player-list" hx-swap="innerHTML">
-            <input type="hidden" name="player_name" value="{{ player.name }}">
-            {% for color in player_colors %}
-            <button type="submit" name="color" value="{{ color }}" class="swatch" data-theme="{{ color }}"
-                    title="{{ color | title }}" aria-label="{{ color | title }}"
-                    aria-pressed="{{ 'true' if color == player.color else 'false' }}"
-                    {%- if color != player.color and color not in free %} disabled{% endif %}></button>
-            {% endfor %}
-        </form>
-        <form class="inline-form" hx-post="/lobby/remove-player" hx-target="#player-list" hx-swap="innerHTML">
-            <input type="hidden" name="player_name" value="{{ player.name }}">
-            <button type="submit">Remove</button>
-        </form>
-    </li>
-    {% endfor %}
-</ul>
+<table class="player-table">
+    <thead>
+        <tr>
+            <th colspan="2">Players {{ game.players | length }}/{{ max_players }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for player in game.players %}
+        <tr>
+            <td class="width-auto">
+                <div class="player-row">
+                    <span class="player-name">{{ player.name }}</span>
+                    <form class="swatches" role="group" aria-label="Color for {{ player.name }}"
+                          hx-post="/lobby/set-player-color" hx-target="#player-list" hx-swap="innerHTML">
+                        <input type="hidden" name="player_name" value="{{ player.name }}">
+                        {% for color in player_colors %}
+                        <button type="submit" name="color" value="{{ color }}" class="swatch" data-theme="{{ color }}"
+                                title="{{ color | title }}" aria-label="{{ color | title }}"
+                                aria-pressed="{{ 'true' if color == player.color else 'false' }}"
+                                {%- if color != player.color and color not in free %} disabled{% endif %}></button>
+                        {% endfor %}
+                    </form>
+                </div>
+            </td>
+            <td class="width-min">
+                <form hx-post="/lobby/remove-player" hx-target="#player-list" hx-swap="innerHTML">
+                    <input type="hidden" name="player_name" value="{{ player.name }}">
+                    <button type="submit" title="Remove" aria-label="Remove {{ player.name }}">&times;</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% else %}
-<p>No players yet.</p>
+<p class="hint">No players yet.</p>
 {% endif %}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import re
 import time
 from types import SimpleNamespace
@@ -86,6 +87,21 @@ class TestHomeRoute:
             resp = authed_client.get("/")
         assert "Login with Spotify" in resp.text
 
+    def test_header_has_language_selector_defaulting_to_english(
+        self, client: TestClient
+    ):
+        with client:
+            resp = client.get("/")
+        header = resp.text.split('<table class="header">')[1].split("</table>")[0]
+        assert '<option value="en" selected>English</option>' in header
+        assert '<option value="de">Deutsch</option>' in header
+
+    def test_language_selector_follows_browser_language(self, client: TestClient):
+        with client:
+            resp = client.get("/", headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
+        assert '<option value="de" selected>Deutsch</option>' in resp.text
+        assert '<option value="en">English</option>' in resp.text
+
     def test_stylesheets_and_font_are_served(self, client: TestClient):
         with client:
             resp = client.get("/")
@@ -99,8 +115,8 @@ class TestHomeRoute:
         assert re.fullmatch(r"\d+\.\d+\.\d+", project.version)
         with client:
             resp = client.get("/")
-        assert '<footer class="site-footer">' in resp.text
-        assert f"Musically v{project.version}" in resp.text
+        footer = resp.text.split('<footer class="site-footer">')[1]
+        assert f"Musically v{project.version}" in footer
         assert f'href="{project.repository}"' in resp.text
         assert f'href="{project.repository}/blob/main/LICENSE"' in resp.text
         assert "https://musicbrainz.org" in resp.text
@@ -151,13 +167,22 @@ class TestLobbyRoutes:
         with authed_client:
             resp = authed_client.get("/lobby")
         assert resp.status_code == 200
-        assert "Game Lobby" in resp.text
         assert "Rolling Stone 500 Best Songs Of All Time" in resp.text
         assert "Choose a playlist" in resp.text
+        assert "<summary>Use your own playlist</summary>" in resp.text
         assert "Loading playlist..." in resp.text
         assert 'hx-disabled-elt="#playlist-setup, #lobby-controls"' in resp.text
         assert "Add at least one player to start." in resp.text
-        assert '<button type="submit" disabled>Start Game</button>' in resp.text
+        assert '<button type="submit" class="button-primary" disabled>Start Game</button>' in resp.text
+
+    def test_lobby_without_predefined_playlists_shows_url_form(
+        self, authed_client: TestClient
+    ):
+        config = dataclasses.replace(app.state.game_config, playlists=[])
+        with patch.object(app.state, "game_config", config), authed_client:
+            resp = authed_client.get("/lobby")
+        assert "<details>" not in resp.text
+        assert 'id="playlist_url"' in resp.text
 
     def test_lobby_redirects_when_tokens_lost(self, authed_client: TestClient):
         """Server restart: session cookie survives, in-memory tokens don't."""
@@ -228,7 +253,7 @@ class TestLobbyRoutes:
             )
         assert resp.status_code == 200
         assert "Alice" in resp.text
-        assert '<button type="submit">Start Game</button>' in resp.text
+        assert '<button type="submit" class="button-primary">Start Game</button>' in resp.text
         assert "Add at least one player to start." not in resp.text
 
     def test_add_duplicate_player(self, authed_client: TestClient):
@@ -246,7 +271,7 @@ class TestLobbyRoutes:
             )
         assert resp.status_code == 200
         assert "Alice" not in resp.text
-        assert '<button type="submit" disabled>Start Game</button>' in resp.text
+        assert '<button type="submit" class="button-primary" disabled>Start Game</button>' in resp.text
 
     def test_added_player_gets_color_swatches(self, authed_client: TestClient):
         with authed_client:

@@ -1,16 +1,18 @@
 {% set device_ids = devices | map(attribute="id") | list %}
 <form hx-post="/lobby/set-device" hx-target="#device-picker" hx-swap="innerHTML" hx-trigger="change">
-    <label for="device_id">Play music on:</label>
-    <select name="device_id" id="device_id">
-        <option value=""{% if not selected %} selected{% endif %}>This browser (web player)</option>
-        {% for device in devices %}
-        <option value="{{ device.id }}"{% if selected and selected.id == device.id %} selected{% endif %}>{{ device.name }} ({{ device.type }})</option>
-        {% endfor %}
-        {% if selected and selected.id not in device_ids %}
-        <option value="{{ selected.id }}" selected>{{ selected.name }} (not found)</option>
-        {% endif %}
-    </select>
-    <button type="button" hx-get="/lobby/devices" hx-target="#device-picker" hx-swap="innerHTML">Refresh</button>
+    <label for="device_id">Play music on</label>
+    <div class="input-row">
+        <select name="device_id" id="device_id">
+            <option value=""{% if not selected %} selected{% endif %}>This browser (web player)</option>
+            {% for device in devices %}
+            <option value="{{ device.id }}"{% if selected and selected.id == device.id %} selected{% endif %}>{{ device.name }} ({{ device.type }})</option>
+            {% endfor %}
+            {% if selected and selected.id not in device_ids %}
+            <option value="{{ selected.id }}" selected>{{ selected.name }} (not found)</option>
+            {% endif %}
+        </select>
+        <button type="button" hx-get="/lobby/devices" hx-target="#device-picker" hx-swap="innerHTML">Refresh</button>
+    </div>
 </form>
 {% if error %}
 <p class="message message--error">{{ error }}</p>

@@ -13,13 +13,27 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    <h1>Musically</h1>
-    <hr>
+    {% set current_language = preferred_language(request.headers.get("accept-language", "")) %}
+    <table class="header">
+        <tr>
+            <td class="width-auto">
+                <h1 class="title">Musically</h1>
+                <span class="subtitle">A party song-guessing game</span>
+            </td>
+            <td class="width-min">
+                <select name="language" aria-label="Language">
+                    {% for code, name in languages.items() %}
+                    <option value="{{ code }}"{% if code == current_language %} selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+        </tr>
+    </table>
     {% block content %}{% endblock %}
     <footer class="site-footer">
         <hr>
-        {# New tabs, so following a link mid-game keeps the Spotify player alive. #}
         <p>Musically v{{ project.version }}</p>
+        {# New tabs, so following a link mid-game keeps the Spotify player alive. #}
         <p>
             <a href="{{ project.repository }}" target="_blank" rel="noopener">Source</a>
             · <a href="{{ project.repository }}/blob/main/LICENSE" target="_blank" rel="noopener">License</a>

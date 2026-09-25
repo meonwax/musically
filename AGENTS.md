@@ -40,6 +40,16 @@ See `docs/architecture.md` for the full architecture and design plan.
 - No CSS frameworks. Keep styling minimal.
 - Styling builds on `static/css/monospace.css` (a trimmed copy of The Monospace Web). Keep that file close to upstream and put overrides in `theme.css`, `app.css` or page stylesheets.
 - Never hardcode colors. Use the theme variables from `static/css/theme.css` (`--text-color`, `--background-color`, `--color-accent`, ...) so the page follows the player on turn.
+- Build UI from The Monospace Web's components before inventing new ones: the `.header` table, bordered tables with `.width-min`/`.width-auto`, `<details>`, `.grid`, labelled inputs and buttons. Size and space things in `ch` and `var(--line-height)` so they stay on the character grid.
+- Text comes in the base size and `var(--font-size-small)` for secondary content such as the footer and the header's language selector. Don't introduce other sizes for body text.
+- Shared form patterns live in `app.css`: `.input-row` (an input or select that takes the free width, with buttons beside it), `.button-primary` for the main action of a page, `.table-scroll` for tables that may be wider than a phone.
+
+## Responsive Layout
+
+- Every page must look good on phones, tablets and desktop browsers. Check each changed page at 360, 768 and 1280 px wide.
+- Nothing may be wider than the viewport. `body` hides horizontal overflow, so wide content is cut off, not scrollable. Let rows wrap (`flex-wrap`), break long names (`overflow-wrap: anywhere`) and wrap wide tables in `.table-scroll`.
+- Keep tap targets at least one input height (`2 * var(--line-height)`) tall, and prefer short button labels so rows fit on a phone.
+- Phone-specific rules go in `@media screen and (max-width: 480px)`, the breakpoint `monospace.css` uses.
 
 ## Testing
 
@@ -47,6 +57,7 @@ See `docs/architecture.md` for the full architecture and design plan.
 - Tests live in `tests/` and mirror the `app/` structure:
   - `test_game.py`: unit tests for game state and logic
   - `test_game_config.py`: unit tests for loading `config.toml`
+  - `test_i18n.py`: unit tests for browser language detection
   - `test_matching.py`: unit tests for fuzzy matching
   - `test_musicbrainz.py`: unit tests for the release year lookup (HTTP mocked)
   - `test_spotify.py`: unit tests for Spotify client (playlist parsing, tokens, auth URL)
