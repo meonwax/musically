@@ -28,6 +28,10 @@
     </p>
 </div>
 
+{% if game.playlist %}
+<p>Playlist: <a href="{{ game.playlist.url }}" target="_blank" rel="noopener">{{ game.playlist.name }}</a></p>
+{% endif %}
+
 <!-- Submitted by the JS once the player is ready. Later rounds are swapped
      in without a reload and trigger playback themselves, reusing this device. -->
 <form id="play-track-form" class="hidden" hx-post="/game/play-track" hx-swap="none">

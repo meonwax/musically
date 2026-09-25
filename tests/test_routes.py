@@ -10,7 +10,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import MAX_PLAYERS, GamePhase, GameState, PlaybackDevice, PlayerColor
+from app.game import (
+    MAX_PLAYERS,
+    GamePhase,
+    GameState,
+    PlaybackDevice,
+    PlayerColor,
+    Playlist,
+)
 from app.main import app
 from app.routes.lobby import _restart_enrichment, _run_enrichment
 from app.spotify import PlaybackState, SpotifyTokens
@@ -208,6 +215,39 @@ class TestLobbyRoutes:
         assert "5 tracks" in resp.text
         assert "Fetching original release years" in resp.text
         assert len(app.state.game.playlist_tracks) == 5
+
+    @pytest.mark.parametrize("as_uri", [False, True])
+    def test_predefined_playlist_takes_name_from_config(
+        self, authed_client: TestClient, as_uri: bool
+    ):
+        predefined = app.state.game_config.playlists[0]
+        playlist_id = app.state.spotify.extract_playlist_id(predefined.url)
+        url = f"spotify:playlist:{playlist_id}" if as_uri else predefined.url
+        with (
+            patch.object(
+                app.state.spotify, "get_playlist_tracks",
+                new_callable=AsyncMock, return_value=sample_tracks(),
+            ),
+            patch("app.routes.lobby.enrich_tracks", new_callable=AsyncMock),
+            authed_client,
+        ):
+            authed_client.post("/lobby/set-playlist", data={"playlist_url": url})
+        assert app.state.game.playlist.name == predefined.name
+        assert app.state.game.playlist.id == playlist_id
+
+    def test_custom_playlist_is_named_generically(self, authed_client: TestClient):
+        with (
+            patch.object(
+                app.state.spotify, "get_playlist_tracks",
+                new_callable=AsyncMock, return_value=sample_tracks(),
+            ),
+            patch("app.routes.lobby.enrich_tracks", new_callable=AsyncMock),
+            authed_client,
+        ):
+            authed_client.post(
+                "/lobby/set-playlist", data={"playlist_url": "spotify:playlist:abc"}
+            )
+        assert app.state.game.playlist.name == "Custom playlist"
 
     def test_set_playlist_without_playable_tracks(self, authed_client: TestClient):
         with (
@@ -468,6 +508,16 @@ class TestGameRoutes:
         assert f'src="/static/js/spotify-player.js?v={version}"' in resp.text
         for sheet in ("reset", "monospace", "theme", "app"):
             assert f'href="/static/css/{sheet}.css?v={version}"' in resp.text
+
+    def test_game_page_shows_playlist(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.playlist = Playlist(id="abc", name="Vice City 80s")
+        with authed_client:
+            resp = authed_client.get("/game")
+        assert (
+            '<p>Playlist: <a href="https://open.spotify.com/playlist/abc" '
+            'target="_blank" rel="noopener">Vice City 80s</a></p>'
+        ) in resp.text
 
     def test_page_takes_turn_players_color(self, authed_client: TestClient):
         game = self._setup_game()

@@ -42,6 +42,7 @@ sequenceDiagram
 - A request counts as logged in only if the session cookie says so **and** tokens exist, since tokens are lost on server restart while the cookie survives
 - Backend handles automatic token refresh when access token expires
 - Playlist contents come from `GET /v1/playlists/{id}/items` (the `/tracks` endpoint was removed in the February 2026 Web API changes). Spotify only returns items for playlists the host owns or collaborates on. Local files and podcast episodes are skipped.
+- The game page names the loaded playlist (`GameState.playlist`) and links to it on Spotify. Predefined playlists use their name from `config.toml`, matched by playlist ID. Other playlists show as "Custom playlist", without an extra API call for the name
 
 ### Playback Architecture
 

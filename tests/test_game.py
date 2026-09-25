@@ -7,6 +7,7 @@ from app.game import (
     PlaybackDevice,
     Player,
     PlayerColor,
+    Playlist,
     RoundState,
     Track,
     compute_points,
@@ -183,6 +184,16 @@ class TestGameStatePlaylist:
     def test_set_playlist(self, game: GameState):
         game.set_playlist(sample_tracks())
         assert len(game.playlist_tracks) == 5
+
+    def test_set_playlist_keeps_its_name_and_link(self, game: GameState):
+        game.set_playlist(sample_tracks(), Playlist(id="abc", name="Vice City 80s"))
+        assert game.playlist.name == "Vice City 80s"
+        assert game.playlist.url == "https://open.spotify.com/playlist/abc"
+
+    def test_reset_forgets_playlist(self, game: GameState):
+        game.set_playlist(sample_tracks(), Playlist(id="abc", name="Vice City 80s"))
+        game.reset()
+        assert game.playlist is None
 
     def test_set_playlist_resets_enrichment(self, game: GameState):
         game.year_enrichment_done = True

@@ -6,7 +6,14 @@ import logging
 from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.game import MAX_PLAYERS, GamePhase, GameState, PlaybackDevice, PlayerColor
+from app.game import (
+    MAX_PLAYERS,
+    GamePhase,
+    GameState,
+    PlaybackDevice,
+    PlayerColor,
+    Playlist,
+)
 from app.musicbrainz import enrich_tracks
 from app.routes.auth import is_logged_in
 from app.templating import templates
@@ -151,6 +158,14 @@ def _restart_enrichment(app: FastAPI, game: GameState) -> None:
     app.state.enrichment_task = asyncio.create_task(_run_enrichment(game))
 
 
+def _playlist(request: Request, playlist_id: str) -> Playlist:
+    spotify = request.app.state.spotify
+    for predefined in request.app.state.game_config.playlists:
+        if spotify.extract_playlist_id(predefined.url) == playlist_id:
+            return Playlist(id=playlist_id, name=predefined.name)
+    return Playlist(id=playlist_id, name="Custom playlist")
+
+
 @router.post("/lobby/set-playlist", response_class=HTMLResponse)
 async def set_playlist(request: Request, playlist_url: str = Form(...)):
     spotify = request.app.state.spotify
@@ -170,7 +185,7 @@ async def set_playlist(request: Request, playlist_url: str = Form(...)):
                     "collaborate on.",
                 ),
             )
-        game.set_playlist(tracks)
+        game.set_playlist(tracks, _playlist(request, playlist_id))
         _restart_enrichment(request.app, game)
         return templates.TemplateResponse(
             request,

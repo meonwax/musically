@@ -58,6 +58,18 @@ class Track:
 
 
 @dataclass(frozen=True)
+class Playlist:
+    """The Spotify playlist a game draws its tracks from."""
+
+    id: str
+    name: str
+
+    @property
+    def url(self) -> str:
+        return f"https://open.spotify.com/playlist/{self.id}"
+
+
+@dataclass(frozen=True)
 class PlaybackDevice:
     """A Spotify Connect device the game plays on instead of the browser."""
 
@@ -120,6 +132,7 @@ class GameState:
     total_rounds: int = 0  # 0 = endless
     phase: GamePhase = GamePhase.LOBBY
 
+    playlist: Playlist | None = None
     playlist_tracks: list[Track] = field(default_factory=list)
     available_tracks: list[Track] = field(default_factory=list)
 
@@ -185,11 +198,18 @@ class GameState:
         self.players = [p for p in self.players if p.name != name]
         logger.info("Player removed: %r (%d remaining)", name, len(self.players))
 
-    def set_playlist(self, tracks: list[Track]) -> None:
+    def set_playlist(
+        self, tracks: list[Track], playlist: Playlist | None = None
+    ) -> None:
+        self.playlist = playlist
         self.playlist_tracks = list(tracks)
         self.available_tracks = []
         self.year_enrichment_done = False
-        logger.info("Playlist set: %d tracks", len(self.playlist_tracks))
+        logger.info(
+            "Playlist set: %r, %d tracks",
+            playlist.name if playlist else None,
+            len(self.playlist_tracks),
+        )
 
     def tracks_to_verify(self) -> Iterator[Track]:
         """Yield tracks whose year isn't verified yet, the current round first.
@@ -359,6 +379,7 @@ class GameState:
     def reset(self) -> None:
         logger.info("Game state reset (was phase=%s)", self.phase.name)
         self.players.clear()
+        self.playlist = None
         self.playlist_tracks.clear()
         self.available_tracks.clear()
         self.current_round = None
