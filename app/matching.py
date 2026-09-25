@@ -11,6 +11,9 @@ _BRACKETED_VERSION = re.compile(
     r"\s*[(\[][^)\]]*\b(?:remaster\w*|version|edit|mono|stereo|mix)\b[^)\]]*[)\]]",
     re.IGNORECASE,
 )
+# Only a backing band starting with "the" is split off: splitting every "&"
+# would let "Fire" count for "Earth, Wind & Fire".
+_BACKING_BAND = re.compile(r"\s+(?:&|and|with)\s+(?=the\s)", re.IGNORECASE)
 
 
 def clean_title(title: str) -> str:
@@ -53,8 +56,15 @@ def check_guess(guess: str, target: str, threshold: int = 75) -> bool:
 
 
 def check_artist(guess: str, artists: list[str], threshold: int = 75) -> bool:
-    """Match the guess against any of the track's artists."""
-    return any(check_guess(guess, artist, threshold) for artist in artists)
+    """Match the guess against any of the track's artists.
+
+    "Bob Marley & The Wailers" also accepts "Bob Marley" or "The Wailers".
+    """
+    return any(
+        check_guess(guess, name, threshold)
+        for artist in artists
+        for name in [artist, *_BACKING_BAND.split(artist)]
+    )
 
 
 def check_year(guess: int | None, actual: int | None) -> bool:

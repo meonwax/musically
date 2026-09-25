@@ -180,6 +180,33 @@ class TestCheckArtist:
     def test_lone_the_does_not_match(self):
         assert check_artist("the", ["The Rolling Stones"]) is False
 
+    @pytest.mark.parametrize(
+        ("guess", "artist"),
+        [
+            ("Bob Marley", "Bob Marley & The Wailers"),
+            ("The Wailers", "Bob Marley & The Wailers"),
+            ("Wailers", "Bob Marley & The Wailers"),
+            ("Bob Marley and the Wailers", "Bob Marley & The Wailers"),
+            ("Tom Petty", "Tom Petty and the Heartbreakers"),
+            ("Huey Lewis", "Huey Lewis & The News"),
+            ("Echo", "Echo & the Bunnymen"),
+        ],
+    )
+    def test_lead_or_backing_band_is_enough(self, guess: str, artist: str):
+        assert check_artist(guess, [artist]) is True
+
+    @pytest.mark.parametrize(
+        ("guess", "artist"),
+        [
+            ("Fire", "Earth, Wind & Fire"),
+            ("Sons", "Mumford & Sons"),
+            ("Simon", "Simon & Garfunkel"),
+            ("Bob", "Bob Marley & The Wailers"),
+        ],
+    )
+    def test_part_of_a_duo_or_band_name_is_not_enough(self, guess: str, artist: str):
+        assert check_artist(guess, [artist]) is False
+
 
 class TestCheckYear:
     def test_exact_match(self):

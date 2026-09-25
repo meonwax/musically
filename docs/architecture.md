@@ -97,6 +97,7 @@ Implemented in `app/matching.py`:
 - Compare using `thefuzz.fuzz.token_sort_ratio`; **>= 75** counts as correct (handles typos and word order)
 - There is deliberately no substring matching, so a single word from a longer title (e.g. "love") does not count
 - Artist guesses match if they fit any of the track's artists
+- Spotify credits acts like "Bob Marley & The Wailers" as one artist, so the lead ("Bob Marley") and the backing band ("The Wailers") also count on their own. This split only happens before "& the", "and the" or "with the", so neither half of names like "Simon & Garfunkel" or "Earth, Wind & Fire" counts alone
 - Years must match exactly
 - The round result shows the title without version info (`" - Remastered 2012"`, `"(Radio Edit)"`), but keeps other bracketed parts like `"(feat. X)"`
 
