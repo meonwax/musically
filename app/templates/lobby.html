@@ -37,7 +37,7 @@
         <div class="input-row">
             <select name="playlist_url" id="predefined_playlist" required>
                 {% for playlist in predefined_playlists %}
-                <option value="{{ playlist.url }}">{{ playlist.name }}</option>
+                <option value="{{ playlist.url }}"{% if playlist.url == selected_playlist_url %} selected{% endif %}>{{ playlist.name }}</option>
                 {% endfor %}
             </select>
             <button type="submit">Load</button>

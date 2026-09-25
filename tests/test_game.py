@@ -204,6 +204,22 @@ class TestGameStatePlaylist:
         game_ready.start_game()
         assert len(game_ready.available_tracks) == 5
 
+    def test_in_progress_only_while_playing(self, game_ready: GameState):
+        assert not game_ready.in_progress
+        game_ready.start_game()
+        game_ready.start_round()
+        assert game_ready.in_progress
+        for _ in game_ready.players:
+            game_ready.skip_turn()
+        assert game_ready.phase == GamePhase.ROUND_RESULT
+        assert game_ready.in_progress
+        game_ready.end_game()
+        assert not game_ready.in_progress
+
+    def test_new_round_has_not_started_playback(self, game_playing: GameState):
+        game_playing.current_round.playback_started = True
+        assert game_playing.start_round().playback_started is False
+
     def test_reset_keeps_playback_device(self, game_ready: GameState):
         device = PlaybackDevice(id="d", name="Kitchen", type="Speaker")
         game_ready.playback_device = device

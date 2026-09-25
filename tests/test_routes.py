@@ -182,6 +182,93 @@ class TestLobbyRoutes:
         assert "Add at least one player to start." in resp.text
         assert '<button type="submit" class="button-primary" disabled>Start Game</button>' in resp.text
 
+    @pytest.mark.parametrize("round_over", [False, True])
+    def test_lobby_during_game_returns_to_game(
+        self, authed_client: TestClient, round_over: bool
+    ):
+        game = app.state.game
+        for name in ["Alice"] if round_over else ["Alice", "Bob"]:
+            game.add_player(name)
+        game.set_playlist(sample_tracks())
+        game.start_game()
+        game.start_round()
+        game.submit_guess(game.current_round.track.name, "", None)
+        phase = game.phase
+        assert phase == (GamePhase.ROUND_RESULT if round_over else GamePhase.PLAYING)
+        with authed_client:
+            resp = authed_client.get("/lobby")
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "/game"
+        assert game.phase == phase
+        assert game.round_number == 1
+        assert game.players[0].score == 1
+
+    def test_lobby_after_game_keeps_players_and_playlist(self, authed_client: TestClient):
+        game = app.state.game
+        game.add_player("Alice")
+        game.set_playlist(sample_tracks(), Playlist(id="abc", name="Vice City 80s"))
+        game.start_game()
+        game.end_game()
+        with authed_client:
+            resp = authed_client.get("/lobby")
+        assert resp.status_code == 200
+        assert game.phase == GamePhase.LOBBY
+        assert [p.name for p in game.players] == ["Alice"]
+        assert "Playlist &#34;Vice City 80s&#34; loaded: 5 tracks." in resp.text
+
+    @pytest.mark.parametrize(
+        ("path", "data"),
+        [
+            ("/lobby/add-player", {"player_name": "Mallory"}),
+            ("/lobby/remove-player", {"player_name": "Alice"}),
+            ("/lobby/set-player-color", {"player_name": "Alice", "color": "blue"}),
+            ("/lobby/set-playlist", {"playlist_url": "spotify:playlist:other"}),
+            ("/lobby/set-device", {"device_id": ""}),
+        ],
+    )
+    def test_stale_lobby_cannot_change_running_game(
+        self, authed_client: TestClient, path: str, data: dict
+    ):
+        game = app.state.game
+        game.add_player("Alice")
+        game.set_playlist(sample_tracks())
+        game.playback_device = KITCHEN
+        game.start_game()
+        game.start_round()
+        with (
+            patch.object(app.state.spotify, "get_playlist_tracks", new_callable=AsyncMock) as mock_tracks,
+            authed_client,
+        ):
+            resp = authed_client.post(path, data=data)
+        assert resp.headers["HX-Redirect"] == "/game"
+        assert [(p.name, p.color) for p in game.players] == [("Alice", PlayerColor.RED)]
+        assert len(game.playlist_tracks) == 5
+        assert game.playback_device == KITCHEN
+        mock_tracks.assert_not_awaited()
+
+    def test_stale_lobby_cannot_restart_running_game(self, authed_client: TestClient):
+        game = app.state.game
+        game.add_player("Alice")
+        game.set_playlist(sample_tracks())
+        game.start_game()
+        game.start_round()
+        game.players[0].score = 3
+        with authed_client:
+            resp = authed_client.post("/lobby/start", data={"total_rounds": "5"})
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/game"
+        assert game.players[0].score == 3
+        assert game.round_number == 1
+
+    def test_lobby_preselects_loaded_playlist(self, authed_client: TestClient):
+        predefined = app.state.game_config.playlists[1]
+        playlist_id = app.state.spotify.extract_playlist_id(predefined.url)
+        app.state.game.set_playlist(sample_tracks(), Playlist(id=playlist_id, name=predefined.name))
+        with authed_client:
+            resp = authed_client.get("/lobby")
+        assert f'<option value="{predefined.url}" selected>' in resp.text
+        assert resp.text.count(" selected>") == 2  # the playlist and the language
+
     def test_lobby_without_predefined_playlists_shows_url_form(
         self, authed_client: TestClient
     ):
@@ -734,7 +821,71 @@ class TestGameRoutes:
         ):
             resp = authed_client.post("/game/play-track", data={"device_id": "dev1"})
         assert resp.status_code == 200
-        mock_play.assert_awaited_once_with(game.current_round.track.uri, "dev1")
+        mock_play.assert_awaited_once_with(game.current_round.track.uri, "dev1", 0)
+        assert game.current_round.playback_started
+
+    def _replay(self, authed_client: TestClient, device_id: str = "dev1", **state_mock):
+        """Post /game/play-track as a page reload does; `state_mock` sets up
+        Spotify's reported playback state."""
+        with (
+            patch.object(app.state.spotify, "play_track", new_callable=AsyncMock) as mock_play,
+            patch.object(
+                app.state.spotify, "get_playback_state", new_callable=AsyncMock, **state_mock
+            ) as mock_state,
+            authed_client,
+        ):
+            authed_client.post("/game/play-track", data={"device_id": device_id})
+        return mock_play, mock_state
+
+    def test_first_play_ignores_spotify_state(self, authed_client: TestClient):
+        game = self._setup_game()
+        uri = game.current_round.track.uri
+        state = PlaybackState(device_id="dev1", paused=False, position=5000, track_uri=uri)
+        mock_play, mock_state = self._replay(authed_client, return_value=state)
+        mock_state.assert_not_awaited()
+        mock_play.assert_awaited_once_with(uri, "dev1", 0)
+
+    def test_reload_leaves_track_playing_on_same_device(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.current_round.playback_started = True
+        uri = game.current_round.track.uri
+        state = PlaybackState(device_id="dev1", paused=True, position=5000, track_uri=uri)
+        mock_play, _ = self._replay(authed_client, return_value=state)
+        mock_play.assert_not_awaited()
+
+    def test_reload_moves_track_to_new_browser_player(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.current_round.playback_started = True
+        uri = game.current_round.track.uri
+        state = PlaybackState(device_id="old-tab", paused=False, position=73_000, track_uri=uri)
+        mock_play, _ = self._replay(authed_client, "new-tab", return_value=state)
+        mock_play.assert_awaited_once_with(uri, "new-tab", 73_000)
+
+    @pytest.mark.parametrize(
+        "state_mock",
+        [
+            {"return_value": None},
+            {"return_value": PlaybackState(
+                device_id="dev1", paused=False, position=5000, track_uri="spotify:track:other"
+            )},
+            {"side_effect": RuntimeError("Spotify down")},
+        ],
+        ids=["nothing-playing", "other-track", "state-error"],
+    )
+    def test_reload_restarts_track_otherwise(self, authed_client: TestClient, state_mock):
+        game = self._setup_game()
+        game.current_round.playback_started = True
+        mock_play, _ = self._replay(authed_client, **state_mock)
+        mock_play.assert_awaited_once_with(game.current_round.track.uri, "dev1", 0)
+
+    def test_next_round_starts_its_track_from_the_beginning(self, authed_client: TestClient):
+        game = self._setup_game()
+        game.current_round.playback_started = True
+        for _ in game.players:
+            game.skip_turn()
+        with authed_client:
+            authed_client.post("/game/next-round")
+        assert game.current_round.playback_started is False
 
     def test_play_track_without_device_is_noop(self, authed_client: TestClient):
         self._setup_game()
@@ -759,6 +910,7 @@ class TestGameRoutes:
         ):
             resp = authed_client.post("/game/play-track", data={"device_id": "gone"})
         assert resp.status_code == 502
+        assert not app.state.game.current_round.playback_started
 
 
 class TestDeviceRoutes:
@@ -840,17 +992,6 @@ class TestDeviceRoutes:
         ):
             resp = authed_client.get("/lobby/devices")
         assert '<option value="kitchen-id" selected>Kitchen (not found)</option>' in resp.text
-
-    def test_device_survives_lobby_reset(self, authed_client: TestClient):
-        game = app.state.game
-        game.playback_device = KITCHEN
-        game.add_player("Alice")
-        game.set_playlist(sample_tracks())
-        game.start_game()
-        with authed_client:
-            authed_client.get("/lobby")
-        assert game.players == []
-        assert game.playback_device == KITCHEN
 
 
 class TestPlaybackControlRoutes:

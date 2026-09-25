@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from app.game import GamePhase, GameState
 from app.routes.auth import is_logged_in
+from app.routes.htmx import htmx_redirect
 from app.spotify import WEB_PLAYER_NAME
 from app.templating import templates
 
@@ -29,11 +30,6 @@ def _guess_area(request: Request, game: GameState) -> HTMLResponse:
 
 def _round_is_open(game: GameState) -> bool:
     return game.current_round is not None and not game.current_round.all_guessed
-
-
-def _htmx_redirect(url: str) -> HTMLResponse:
-    # A plain redirect would make HTMX swap the whole target page into the partial.
-    return HTMLResponse("", headers={"HX-Redirect": url})
 
 
 @router.get("/game", response_class=HTMLResponse)
@@ -64,7 +60,7 @@ async def submit_guess(
 ):
     game = request.app.state.game
     if not _round_is_open(game):
-        return _htmx_redirect("/game")
+        return htmx_redirect("/game")
     year_val = int(year) if year.strip().isdigit() else None
     game.submit_guess(guess, artist, year_val)
     return _guess_area(request, game)
@@ -74,7 +70,7 @@ async def submit_guess(
 async def skip_turn(request: Request):
     game = request.app.state.game
     if not _round_is_open(game):
-        return _htmx_redirect("/game")
+        return htmx_redirect("/game")
     game.skip_turn()
     return _guess_area(request, game)
 
@@ -88,7 +84,7 @@ async def next_round(request: Request):
     if game.is_game_over():
         logger.info("Last round complete, ending game")
         game.end_game()
-        return _htmx_redirect("/leaderboard")
+        return htmx_redirect("/leaderboard")
     game.start_round()
     return templates.TemplateResponse(
         request, "partials/round.html",
@@ -120,24 +116,51 @@ async def leaderboard(request: Request):
     )
 
 
+async def _resume_position(
+    request: Request, track_uri: str, device_id: str
+) -> int | None:
+    """Where to continue a track after a page reload; None if it still plays."""
+    try:
+        state = await request.app.state.spotify.get_playback_state()
+    except Exception:
+        logger.exception("Reading the playback state failed")
+        return 0
+    if state is None or state.track_uri != track_uri:
+        return 0
+    if state.device_id == device_id:
+        return None
+    # The browser player got a new device on reload; move the track over.
+    return state.position
+
+
 @router.post("/game/play-track")
 async def play_track(request: Request, device_id: str = Form("")):
     game = request.app.state.game
+    rnd = game.current_round
     # Empty when a round is swapped in before the player is ready; the
     # player's "ready" handler starts playback in that case.
-    if game.current_round and device_id:
-        track = game.current_round.track
-        logger.info(
-            "Playback requested: round=%d device=%s track=%r",
-            game.round_number,
-            device_id,
-            track.name,
-        )
-        try:
-            await request.app.state.spotify.play_track(track.uri, device_id)
-        except Exception:
-            logger.exception("Starting playback failed on device %s", device_id)
-            return HTMLResponse("", status_code=502)
+    if rnd is None or not device_id:
+        return HTMLResponse("")
+    track = rnd.track
+    position = 0
+    if rnd.playback_started:
+        position = await _resume_position(request, track.uri, device_id)
+        if position is None:
+            logger.info("Page reloaded, track still playing on %s", device_id)
+            return HTMLResponse("")
+    logger.info(
+        "Playback requested: round=%d device=%s track=%r position=%d",
+        game.round_number,
+        device_id,
+        track.name,
+        position,
+    )
+    try:
+        await request.app.state.spotify.play_track(track.uri, device_id, position)
+    except Exception:
+        logger.exception("Starting playback failed on device %s", device_id)
+        return HTMLResponse("", status_code=502)
+    rnd.playback_started = True
     return HTMLResponse("")
 
 

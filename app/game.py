@@ -96,6 +96,8 @@ class RoundState:
     player_order: list[str]
     guesses: list[RoundGuess] = field(default_factory=list)
     current_player_idx: int = 0
+    # Set once the track was started, so a page reload continues it.
+    playback_started: bool = False
 
     @property
     def current_player(self) -> str | None:
@@ -144,6 +146,10 @@ class GameState:
     # None plays in the browser via the Web Playback SDK. Kept across resets,
     # since it is the host's setup rather than part of a game.
     playback_device: PlaybackDevice | None = None
+
+    @property
+    def in_progress(self) -> bool:
+        return self.phase in (GamePhase.PLAYING, GamePhase.ROUND_RESULT)
 
     @property
     def is_full(self) -> bool:

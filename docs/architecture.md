@@ -73,6 +73,9 @@ stateDiagram-v2
     FinalLeaderboard --> [*]
 ```
 
+- A game only ends through "End Game" or its last round, never by navigation. While it runs (`GameState.in_progress`), `GET /lobby` redirects to `/game`, so the Back button or a reload can't reset it. Lobby changes from a stale tab answer with `HX-Redirect: /game`, and `POST /lobby/start` redirects without restarting
+- All game state is on the server, so reloading any page shows the same state. The lobby preselects the loaded playlist
+
 ### Detailed Round Mechanics
 
 1. Server picks a random track from the playlist (no repeats until the playlist is exhausted)
@@ -216,7 +219,7 @@ Since HTMX drives the UI but Spotify playback requires JavaScript, a small bridg
 - The script gets its mode from `data-*` attributes on its own `<script>` tag. In browser mode the SDK is loaded and its events drive the UI. If the SDK reports `autoplay_failed`, the status line suggests picking a Spotify device in the lobby
 - In Connect mode the SDK isn't loaded. `#device-id` is prefilled with the chosen device, playback starts once the DOM is ready, and the controls go through `GET /game/playback`, `POST /game/pause` and `/game/resume`. The state is polled every 5 s for the elapsed time
 - Connect mode doesn't fade: every volume step would be a Web API call, and the device's own volume stays untouched. Spotify doesn't guarantee the order of player commands, so a pause waits briefly before the next track is started
-- Reloading `/game` still works: the player reconnects and the current song restarts
+- Reloading `/game` continues the current song. `RoundState.playback_started` marks a track that was already started; a later `/game/play-track` for it reads `/me/player` first. If the same device still has the track, nothing is sent, so a paused song stays paused. If another device has it (the browser player gets a new device ID on every page load), the track restarts on the new device at the reported position. Otherwise it starts from the beginning
 - This keeps JS minimal and lets HTMX handle all game flow navigation
 
 ## Session Management

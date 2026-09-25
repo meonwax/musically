@@ -19,6 +19,7 @@ class PlaybackState:
     device_id: str | None
     paused: bool
     position: int
+    track_uri: str | None = None
 
 
 @dataclass
@@ -173,10 +174,15 @@ class SpotifyClient:
 
     # ── Playback ────────────────────────────────────────────────
 
-    async def play_track(self, track_uri: str, device_id: str) -> None:
+    async def play_track(
+        self, track_uri: str, device_id: str, position_ms: int = 0
+    ) -> None:
+        body: dict = {"uris": [track_uri]}
+        if position_ms:
+            body["position_ms"] = position_ms
         await self._api_put(
             "/me/player/play",
-            json_body={"uris": [track_uri]},
+            json_body=body,
             params={"device_id": device_id},
         )
 
@@ -205,6 +211,7 @@ class SpotifyClient:
             device_id=device.get("id"),
             paused=not data.get("is_playing", False),
             position=data.get("progress_ms") or 0,
+            track_uri=(data.get("item") or {}).get("uri"),
         )
 
     async def pause(self, device_id: str) -> None:

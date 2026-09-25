@@ -224,13 +224,25 @@ class TestGetPlaybackState:
             "device": _device(),
             "is_playing": True,
             "progress_ms": 42_000,
+            "item": {"uri": "spotify:track:1"},
         }
         with patch.object(
             authenticated_spotify, "_request", new_callable=AsyncMock,
             return_value=_response(200, body),
         ):
             state = await authenticated_spotify.get_playback_state()
-        assert state == PlaybackState(device_id="dev1", paused=False, position=42_000)
+        assert state == PlaybackState(
+            device_id="dev1", paused=False, position=42_000, track_uri="spotify:track:1"
+        )
+
+    async def test_state_without_item(self, authenticated_spotify: SpotifyClient):
+        body = {"device": _device(), "is_playing": False, "progress_ms": 0, "item": None}
+        with patch.object(
+            authenticated_spotify, "_request", new_callable=AsyncMock,
+            return_value=_response(200, body),
+        ):
+            state = await authenticated_spotify.get_playback_state()
+        assert state.track_uri is None
 
 
 class TestPlaybackCommands:
@@ -240,6 +252,15 @@ class TestPlaybackCommands:
         mock_put.assert_awaited_once_with(
             "/me/player/play",
             json_body={"uris": ["spotify:track:1"]},
+            params={"device_id": "dev1"},
+        )
+
+    async def test_play_track_from_position(self, authenticated_spotify: SpotifyClient):
+        with patch.object(authenticated_spotify, "_api_put", new_callable=AsyncMock) as mock_put:
+            await authenticated_spotify.play_track("spotify:track:1", "dev1", 73_000)
+        mock_put.assert_awaited_once_with(
+            "/me/player/play",
+            json_body={"uris": ["spotify:track:1"], "position_ms": 73_000},
             params={"device_id": "dev1"},
         )
 

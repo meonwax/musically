@@ -14,8 +14,10 @@ from app.game import (
     PlayerColor,
     Playlist,
 )
+from app.game_config import PredefinedPlaylist
 from app.musicbrainz import enrich_tracks
 from app.routes.auth import is_logged_in
+from app.routes.htmx import htmx_redirect
 from app.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -26,12 +28,13 @@ router = APIRouter()
 def _lobby_status_message(game: GameState) -> str | None:
     if game.playlist_tracks:
         count = len(game.playlist_tracks)
-        if game.year_enrichment_done:
-            return f"Playlist loaded: {count} tracks. Release years verified."
-        return (
-            f"Playlist loaded: {count} tracks. "
-            "Fetching original release years..."
+        loaded = (
+            f'Playlist "{game.playlist.name}" loaded' if game.playlist
+            else "Playlist loaded"
         )
+        if game.year_enrichment_done:
+            return f"{loaded}: {count} tracks. Release years verified."
+        return f"{loaded}: {count} tracks. Fetching original release years..."
     if not game.players:
         return "Add at least one player to start."
     return None
@@ -67,20 +70,29 @@ async def lobby(request: Request):
     if not is_logged_in(request):
         return RedirectResponse("/")
     game = request.app.state.game
-    if game.phase not in (GamePhase.LOBBY, GamePhase.FINISHED):
-        logger.info("Lobby entered during %s, resetting game", game.phase.name)
-        game.reset()
+    if game.in_progress:
+        # Back button or a stale tab; the game only ends via "End Game".
+        logger.info("Lobby requested during %s, back to game", game.phase.name)
+        return RedirectResponse("/game")
     game.phase = GamePhase.LOBBY
+    loaded = game.playlist and _predefined_playlist(request, game.playlist.id)
     return templates.TemplateResponse(
         request,
         "lobby.html",
         context={
             "predefined_playlists": request.app.state.game_config.playlists,
+            "selected_playlist_url": loaded.url if loaded else None,
             **_lobby_message_context(
                 game, error=request.query_params.get("error")
             ),
         },
     )
+
+
+def _back_to_game() -> HTMLResponse:
+    """Refuse a lobby change sent from a stale lobby page mid-game."""
+    logger.info("Lobby change refused: game in progress")
+    return htmx_redirect("/game")
 
 
 def _player_update(
@@ -103,6 +115,8 @@ def _player_update(
 @router.post("/lobby/add-player", response_class=HTMLResponse)
 async def add_player(request: Request, player_name: str = Form(...)):
     game = request.app.state.game
+    if game.in_progress:
+        return _back_to_game()
     name = player_name.strip()
     error = None
     if not name:
@@ -117,6 +131,8 @@ async def add_player(request: Request, player_name: str = Form(...)):
 @router.post("/lobby/remove-player", response_class=HTMLResponse)
 async def remove_player(request: Request, player_name: str = Form(...)):
     game = request.app.state.game
+    if game.in_progress:
+        return _back_to_game()
     game.remove_player(player_name)
     return _player_update(request, game)
 
@@ -126,6 +142,8 @@ async def set_player_color(
     request: Request, player_name: str = Form(...), color: str = Form(...)
 ):
     game = request.app.state.game
+    if game.in_progress:
+        return _back_to_game()
     try:
         choice = PlayerColor(color)
     except ValueError:
@@ -158,18 +176,31 @@ def _restart_enrichment(app: FastAPI, game: GameState) -> None:
     app.state.enrichment_task = asyncio.create_task(_run_enrichment(game))
 
 
-def _playlist(request: Request, playlist_id: str) -> Playlist:
+def _predefined_playlist(
+    request: Request, playlist_id: str
+) -> PredefinedPlaylist | None:
     spotify = request.app.state.spotify
-    for predefined in request.app.state.game_config.playlists:
-        if spotify.extract_playlist_id(predefined.url) == playlist_id:
-            return Playlist(id=playlist_id, name=predefined.name)
-    return Playlist(id=playlist_id, name="Custom playlist")
+    return next(
+        (
+            p for p in request.app.state.game_config.playlists
+            if spotify.extract_playlist_id(p.url) == playlist_id
+        ),
+        None,
+    )
+
+
+def _playlist(request: Request, playlist_id: str) -> Playlist:
+    predefined = _predefined_playlist(request, playlist_id)
+    name = predefined.name if predefined else "Custom playlist"
+    return Playlist(id=playlist_id, name=name)
 
 
 @router.post("/lobby/set-playlist", response_class=HTMLResponse)
 async def set_playlist(request: Request, playlist_url: str = Form(...)):
     spotify = request.app.state.spotify
     game = request.app.state.game
+    if game.in_progress:
+        return _back_to_game()
     try:
         playlist_id = spotify.extract_playlist_id(playlist_url)
         tracks = await spotify.get_playlist_tracks(playlist_id)
@@ -236,6 +267,8 @@ async def list_devices(request: Request):
 @router.post("/lobby/set-device", response_class=HTMLResponse)
 async def set_device(request: Request, device_id: str = Form("")):
     game = request.app.state.game
+    if game.in_progress:
+        return _back_to_game()
     if not device_id:
         game.playback_device = None
         logger.info("Playback device: browser")
@@ -273,6 +306,9 @@ async def enrichment_status(request: Request):
 @router.post("/lobby/start")
 async def start_game(request: Request, total_rounds: str = Form("0")):
     game = request.app.state.game
+    if game.in_progress:
+        logger.info("Start game refused: game in progress")
+        return RedirectResponse("/game", status_code=303)
     if len(game.players) < 1:
         logger.warning("Start game rejected: no players")
         return RedirectResponse("/lobby?error=Need+at+least+one+player", status_code=303)
